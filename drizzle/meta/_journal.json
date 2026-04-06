@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1775217987069,
+      "tag": "0000_cynical_sauron",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1775500000000,
+      "tag": "0001_fork_overlay",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1775600000000,
+      "tag": "0002_session_relation",
+      "breakpoints": true
+    }
+  ]
+}

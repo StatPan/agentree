@@ -1,0 +1,28 @@
+services:
+  opencode:
+    image: ${OPENCODE_IMAGE:-ghcr.io/anomalyco/opencode:latest}
+    environment:
+      HOME: /root
+      OPENCODE_CONFIG_DIR: /root/.config/opencode
+      OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD:-}
+      OPENCODE_SERVER_USERNAME: ${OPENCODE_SERVER_USERNAME:-opencode}
+      OPENCODE_DISABLE_AUTOUPDATE: ${OPENCODE_DISABLE_AUTOUPDATE:-1}
+      OPENCODE_DISABLE_LSP_DOWNLOAD: ${OPENCODE_DISABLE_LSP_DOWNLOAD:-0}
+      OPENCODE_EXPERIMENTAL: ${OPENCODE_EXPERIMENTAL:-0}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ${OPENCODE_WORKSPACE_DIR:-..}:/workspace
+      - ${OPENCODE_CONFIG_HOST_DIR:-${HOME}/.config/opencode}:/root/.config/opencode
+      - ${OPENCODE_DATA_HOST_DIR:-${HOME}/.local/share/opencode}:/root/.local/share/opencode
+    ports:
+      - "${OPENCODE_PORT:-6543}:6543"
+    working_dir: /workspace
+    restart: unless-stopped
+    init: true
+    command: ["serve", "--hostname", "0.0.0.0", "--port", "6543"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:6543/global/health >/dev/null 2>&1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s

@@ -36,6 +36,40 @@ Each node on the canvas = one opencode session. The canvas just visualizes what 
 
 🌱 Early development. PRD in [`docs/PRD.md`](docs/PRD.md).
 
+OpenCode integration notes and supervision source map live in [`docs/OPENCODE_INTEGRATION.md`](docs/OPENCODE_INTEGRATION.md).
+
+## Run opencode with Docker
+
+Agentree expects a running `opencode serve` instance at `http://localhost:6543`.
+
+1. Copy the example env file.
+2. Start the container.
+3. Run Agentree locally with `pnpm run dev`.
+
+```bash
+cd agentree
+cp .env.opencode.example .env.opencode
+# edit .env.opencode — set OPENCODE_SERVER_PASSWORD to a strong secret
+docker compose --env-file .env.opencode -f docker-compose.opencode.yml up -d --build
+export OPENCODE_SERVER_USERNAME=opencode
+export OPENCODE_SERVER_PASSWORD=<your-password>
+pnpm run dev
+```
+
+Useful checks:
+
+```bash
+curl -u opencode:<your-password> http://localhost:6543/global/health
+docker compose --env-file .env.opencode -f docker-compose.opencode.yml logs -f opencode
+```
+
+Notes:
+
+- The compose file uses the official image `ghcr.io/anomalyco/opencode:latest` and runs `opencode serve --hostname 0.0.0.0 --port 6543`.
+- Host `~/.config/opencode` and `~/.local/share/opencode` are mounted into the container so auth, config, and session history persist.
+- `OPENCODE_WORKSPACE_DIR` defaults to `..`, so the repo root is mounted at `/workspace`.
+- If you expose the port beyond localhost, set `OPENCODE_SERVER_PASSWORD` in `.env.opencode` so the server is not left unsecured.
+
 ## License
 
-MIT
+Apache-2.0

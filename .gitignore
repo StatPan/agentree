@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Local SQLite overlay DB — not part of repo state
+*.db
+*.db-shm
+*.db-wal
+
+# Environment files — may contain passwords / secrets
+.env
+.env.*

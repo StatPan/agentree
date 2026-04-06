@@ -1,7 +1,7 @@
 # Agentree PRD
 
 > 목적: Agent 실행 트리를 Figma처럼 인피니트 캔버스로 시각화하고, 실시간 채팅으로 제어할 수 있는 풀스택 오픈소스 대시보드
-> 기준일: 2026-04-03
+> 기준일: 2026-04-06 (Phase 1 완료 기준으로 갱신)
 
 ---
 
@@ -35,159 +35,251 @@ opencode session (root)          ← process
        └─ fork된 session         ← thread
 ```
 
-dashboard DB(SQLite)는 opencode가 모르는 것만 저장한다:
-- 캔버스 노드 위치 (x, y)
-- 사용자 정의 레이블
-- 캔버스 뷰포트 상태
+opencode가 native하게 지원하지 않는 관계/메타데이터는 Agentree DB에 오버레이로 저장한다.
+향후 opencode가 동일 기능을 지원하면 오버레이를 대체하거나 응용한다.
 
 ---
 
-## 3. 범위
+## 3. DB 역할
 
-### Phase 1 — 1인 운용 기준 (v0.1)
+Agentree SQLite는 opencode가 모르는 것을 저장하는 **오버레이 레이어**다.
+
+### 저장 대상
+
+| 테이블 | 내용 |
+|--------|------|
+| `canvas_node` | 노드 위치 (x, y), 사용자 정의 레이블, pinned 여부 |
+| `session_fork` | fork 관계 (하위 호환 유지) |
+| `session_relation` | 일반화된 세션 간 관계 오버레이 |
+
+### session_relation 관계 타입
+
+| 타입 | 설명 |
+|------|------|
+| `fork` | fork된 세션 (session_fork의 일반화) |
+| `linked` | 사용자가 수동으로 연결한 관계 |
+| `detached` | 연결 해제된 관계 |
+| `merged-view` | 병합 뷰로 묶인 관계 |
+
+세션 상태(status, parent, messages)는 여전히 opencode가 source of truth.
+
+---
+
+## 4. 범위
+
+### Phase 1 — 완료 ✓
 
 - 인피니트 캔버스 (줌/팬/드래그)
 - opencode session 트리 → 캔버스 노드 트리 자동 렌더링
-- 노드 상태 배지 (running / done / failed / needs-input)
+- 노드 상태 배지 (running / done / failed / needs-permission / needs-answer)
 - 노드 선택 → 사이드 패널에서 실시간 채팅으로 agent 제어
 - `GET /global/event` SSE → 노드 상태 실시간 반영
-- SQLite — 캔버스 레이아웃 상태만 저장
+- 노드 위치 드래그 → SQLite 영속화 (pinned)
+- permission / question 승인 UI (인라인 + 플로팅 ApprovalQueue)
+- fork 시각화 (FORK 배지, teal 점선 엣지, 포크 소스 표시)
+- subtask 생성 UI
+- opencode SDK 버전 호환성 어댑터 + 경고 표시
+- 일반화된 session_relation 오버레이 모델 (DB + API + 엣지 스타일 기반)
 
-### Phase 2 — 확장
+### Phase 2 — 진행 예정
+
+**Supervision 강화**
+
+- SessionPanel 확장
+  - 세션 메타데이터 블록 (model, provider, agent, cwd, token/cost)
+  - 구조화된 파트 렌더링: `subtask`, `tool`, `file`, `patch`
+  - 미사용 SSE 이벤트 처리: `message.part.updated`, `todo.updated`, `session.diff`, `command.executed`
+- connect / disconnect / merge 관계 UI (session_relation 기반)
+
+**캔버스 관계 표현**
+
+- 관계 타입별 엣지 스타일 (linked: 인디고, merged-view: 바이올렛, detached: 회색 점선)
+- 노드 간 수동 관계 연결/해제 UI
+
+### Phase 3 — 향후
 
 - 다중 오퍼레이터 (Figma 커서처럼 누가 어느 노드 보는지 표시)
 - 노드 메모/태그
-- 실행 히스토리 타임라인
+- 실행 히스토리 타임라인 (tool 호출, patch, diff 순서대로)
 - 오픈소스 배포 (npm / Docker)
 
 ---
 
-## 4. 아키텍처
+## 5. 아키텍처
 
 ```
-apps/agentproc-dashboard/
+apps/agentree/
 ├── src/
-│   ├── frontend/          # React + React Flow
+│   ├── client/            # React + React Flow
 │   │   ├── canvas/        # 인피니트 캔버스 + 노드 렌더링
-│   │   ├── panel/         # 사이드 패널 (채팅, 디테일)
+│   │   ├── panel/         # 사이드 패널 (채팅, 승인, 관계)
 │   │   └── store/         # 실시간 상태 (Zustand)
-│   └── backend/           # Hono 서버
+│   └── server/            # Hono 서버
 │       ├── routes/        # REST API (opencode SDK 프록시)
 │       ├── sse/           # opencode SSE → 클라이언트 브로드캐스트
-│       ├── opencode/      # opencode SDK 연동
-│       └── db/            # SQLite (캔버스 상태만)
+│       ├── opencode/      # opencode SDK 연동 + 호환성 어댑터
+│       └── db/            # SQLite 오버레이 (canvas_node, session_relation)
 ├── drizzle/               # 마이그레이션
 └── docs/
 ```
 
 ---
 
-## 5. 데이터 모델
+## 6. 데이터 모델
 
-### canvas_node (SQLite — dashboard 전용)
+### canvas_node
 
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
-| session_id | text | PK — opencode session ID와 동일 |
-| label | text | 사용자 정의 레이블 (없으면 session title 사용) |
+| session_id | text PK | opencode session ID |
+| label | text | 사용자 정의 레이블 |
 | canvas_x | real | 캔버스 X 위치 |
 | canvas_y | real | 캔버스 Y 위치 |
 | pinned | integer | 0/1 — 자동 레이아웃 대상 여부 |
 | updated_at | text | ISO8601 |
 
-세션 상태(status, parent, messages)는 모두 opencode가 source of truth.
+### session_fork (하위 호환 유지)
+
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| session_id | text PK | fork된 세션 ID |
+| forked_from_session_id | text | 원본 세션 ID |
+| created_at | text | ISO8601 |
+
+### session_relation
+
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | integer PK | auto-increment |
+| from_session_id | text | 소스 세션 (엣지 방향: 부모) |
+| to_session_id | text | 타겟 세션 (엣지 방향: 자식/fork) |
+| relation_type | text | `fork` \| `linked` \| `detached` \| `merged-view` |
+| created_at | text | ISO8601 |
 
 ---
 
-## 6. API
-
-dashboard Hono 서버는 주로 opencode SDK의 프록시 + SSE 브로드캐스터 역할.
+## 7. API
 
 ### 트리 조회
 
 | 메서드 | 경로 | 설명 |
 |--------|------|------|
-| GET | /api/tree | opencode `/session` + `/session/{id}/children` 재귀 조회 → 트리 반환 |
+| GET | /api/tree | 세션 목록 + 상태 + 캔버스 오버레이 + 관계 반환 |
+| GET | /api/health | 서버 + opencode 연결 상태 |
 
-### 채팅 제어
+### 세션 제어
 
 | 메서드 | 경로 | 설명 |
 |--------|------|------|
-| POST | /api/session/:id/message | opencode `/session/{id}/message` 프록시 |
-| GET | /api/session/:id/message | 메시지 히스토리 |
+| GET | /api/session/:id | 세션 상세 |
+| GET | /api/session/:id/messages | 메시지 히스토리 |
+| POST | /api/session | 새 세션 생성 |
+| POST | /api/session/:id/prompt | 프롬프트 전송 |
 | POST | /api/session/:id/abort | 실행 중단 |
-| POST | /api/session/:id/fork | 자식 session 파생 |
+| POST | /api/session/:id/fork | 세션 fork (session_fork + session_relation 듀얼 라이트) |
+| POST | /api/session/:id/subtask | 서브태스크 생성 |
+
+### 승인 제어
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| POST | /api/permission/:requestID/reply | permission 승인/거부 |
+| POST | /api/question/:requestID/reply | question 답변 |
+| POST | /api/question/:requestID/reject | question 거부 |
 
 ### 캔버스 상태
 
 | 메서드 | 경로 | 설명 |
 |--------|------|------|
-| PATCH | /api/canvas/:id | 노드 위치/레이블 저장 (SQLite) |
+| PATCH | /api/canvas/:id | 노드 위치/레이블/pinned 저장 |
+| GET | /api/canvas/:id | 노드 캔버스 상태 조회 |
 
 ### 실시간
 
 | 메서드 | 경로 | 설명 |
 |--------|------|------|
-| GET | /api/events | opencode SSE를 구독해 클라이언트에 브로드캐스트 |
+| GET | /api/events | opencode SSE 클라이언트 브로드캐스트 |
 
 ---
 
-## 7. 프론트 핵심 동작
+## 8. 프론트 핵심 동작
 
 ### 캔버스
 
 - React Flow 기반 인피니트 캔버스
-- 초기 레이아웃: dagre 자동 배치 (아래→위, `rankdir: BT` — 뿌리가 아래, 가지가 위로 뻗음)
-- 노드를 직접 드래그하면 SQLite에 위치 저장 (pinned 처리)
-- SSE 이벤트로 새 session 생성 감지 → 노드 애니메이션 추가
+- 초기 레이아웃: dagre 자동 배치 (rankdir: BT — 뿌리가 아래, 가지가 위)
+- 노드 드래그 → SQLite 위치 저장 (pinned)
+- SSE 이벤트 → 새 노드 실시간 추가
+- recent / all 뷰 모드
+- 디렉토리 기준 그룹 헤더
 
 ### 노드 상태
 
-| 상태 | 색상 | opencode 이벤트 | 설명 |
-|------|------|----------------|------|
-| `running` | 초록 | `EventSessionStatus` | 실행 중 |
-| `needs-permission` | 노랑 | `EventPermissionAsked` | 도구 실행 승인 대기 |
-| `needs-answer` | 주황 | `EventQuestionAsked` | 질문 답변 대기 |
-| `idle` | 파랑 | `EventSessionIdle` | 대기 중 |
-| `done` | 회색 | `EventSessionStatus` | 완료 |
-| `failed` | 빨강 | `EventSessionError` | 오류 |
+| 상태 | 색상 | 트리거 |
+|------|------|--------|
+| `running` | 초록 | `session.status` |
+| `needs-permission` | 노랑 | `permission.asked` |
+| `needs-answer` | 주황 | `question.asked` |
+| `idle` | 파랑 | `session.idle` |
+| `done` | 회색 | `session.status` (done) |
+| `failed` | 빨강 | `session.error` |
 
-```
-┌─────────────────────────────┐
-│ [needs-permission]  worker-1 │
-│ summarize docs task          │
-│ ● edit /src/index.ts 허용?   │
-│ [허용]  [거부]               │
-└─────────────────────────────┘
-```
+### 엣지 스타일
 
-- 클릭 → 오른쪽 사이드 패널
-- `needs-permission` / `needs-answer` 상태면 노드 안에 인라인 액션 버튼 표시
-
-### 엣지(연결선) 상태
-
-부모↔자식 세션 연결선이 현재 상호작용 상태를 시각화한다.
-
-| 상태 | 표현 | 조건 |
-|------|------|------|
-| 기본 | 정적 실선 | 자식이 독립 실행 중 |
-| 승인 요청 중 | 점선 + 위→아래 애니메이션 (자식→부모 방향) | 자식 `needs-permission` |
-| 질문 대기 중 | 주황 점선 + 애니메이션 | 자식 `needs-answer` |
-| 응답 내려보내는 중 | 실선 + 위→아래 역방향 애니메이션 | 부모가 reply 처리 직후 |
-| 완료 | 회색 실선 | 자식 `done` |
-
-React Flow `animated` + 커스텀 엣지 컴포넌트로 구현.
+| 조건 | 색상 | 선 스타일 | 애니메이션 |
+|------|------|-----------|-----------|
+| 기본 부모-자식 | `#374151` | 실선 | 없음 |
+| fork 관계 | `#14b8a6` (teal) | `8 4` 점선 | 없음 |
+| linked 관계 | `#818cf8` (indigo) | `4 2` 점선 | 없음 |
+| merged-view | `#a78bfa` (violet) | 실선 | 없음 |
+| detached | `#6b7280` (gray) | `2 6` 점선 | 없음 |
+| needs-permission | 노랑 | 점선 | 있음 |
+| needs-answer | 주황 | 점선 | 있음 |
 
 ### 사이드 패널
 
-- 해당 session의 메시지 히스토리
-- 채팅 입력 → `POST /api/session/:id/message` → opencode로 전달
-- SSE로 응답 실시간 스트리밍
-- Fork 버튼 → 자식 session 생성 → 캔버스에 새 노드 추가
+- 세션 메시지 히스토리 (현재: text/reasoning 파트)
+- 채팅 입력 → prompt 전송
+- abort 버튼
+- permission / question 인라인 응답 UI
+- 자식 세션 pending 항목 표시
+- fork 소스 표시 및 네비게이션
+- subtask / fork 생성 버튼
 
 ---
 
-## 8. 기술 스택
+## 9. 비즈니스 모델
+
+**라이선스: Apache-2.0**
+
+현재 단계에서 AGPL/BSL은 과잉 대응이다. 이유:
+- 로컬 실행 기반이라 클라우드 프로바이더 strip-mining 위협이 낮음
+- 초기 채택 확산이 방어보다 중요한 시점
+- Apache-2.0은 특허 방어 조항 포함 + 상표는 별도 보호
+
+**상표: 공개 전 KIPO 출원 (9류 + 42류)**
+
+오픈소스로 공개해도 "Agentree" 상표는 라이선스가 보호하지 않음. 출원일 기준으로 권리가 발생하므로, 공개 전 출원이 필요하다.
+
+**수익화: 장기 오픈코어 방향 (현재는 미결)**
+
+| 레이어 | 공개 여부 | 내용 |
+|--------|-----------|------|
+| 코어 | 오픈소스 (Apache-2.0) | 캔버스, 세션 제어, 오버레이 DB, SSE |
+| 팀 레이어 | 유료 (향후, TBD) | 멀티 오퍼레이터, 권한 관리, hosted 연결 |
+
+팀 기능 수요가 실제로 발생하는 시점에 오픈코어 경계를 설계한다. 지금 설계하면 수요보다 수익 구조를 먼저 상정하는 꼴이 됨.
+
+**공개 전 체크리스트**
+- [ ] KIPO 상표 출원 (9류 + 42류, 출원료 104,000원)
+- [ ] `LICENSE` 파일 추가 (Apache-2.0)
+- [ ] `.gitignore` 정리
+- [ ] `README.md` 공개용으로 정리
+- [ ] `.env` 계열 파일 제외 확인
+
+---
+
+## 10. 기술 스택
 
 | 레이어 | 선택 | 이유 |
 |--------|------|------|
@@ -195,33 +287,7 @@ React Flow `animated` + 커스텀 엣지 컴포넌트로 구현.
 | 캔버스 | React Flow | 인피니트 캔버스, 노드 커스텀, 줌/팬 기본 제공 |
 | 레이아웃 | dagre | 트리 자동 배치 |
 | 상태관리 | Zustand | SSE 이벤트 → 캔버스 상태 연동 |
-| 백엔드 | Hono (Node) | TypeScript-first, SSE 내장, opencode SDK 호환 |
+| 백엔드 | Hono (Node) | TypeScript-first, SSE 내장 |
 | ORM | Drizzle | TypeScript 타입 안전 |
-| DB | SQLite (WAL) | 캔버스 레이아웃만 저장 — opencode가 이미 SQLite 사용 |
-| AI 엔진 | opencode SDK | session 트리가 process 계층의 source of truth |
-
-SQLite를 선택한 이유: 실제 동시 write 부하는 opencode 내부에서 처리됨. dashboard DB는 캔버스 위치만 저장하므로 SQLite WAL 모드로 충분.
-
----
-
-## 9. libs/agentproc과의 관계
-
-| | libs/agentproc | apps/agentproc-dashboard |
-|--|--|--|
-| 역할 | CLI 런타임 (`aproc`) | 풀스택 서비스 (UI + API + SQLite) |
-| 상태 저장 | 파일시스템 | opencode session 트리 + SQLite(캔버스) |
-| UI | 기본 workbench HTML | React Flow 캔버스 |
-| 실시간 | 없음 | SSE |
-| 제어 | CLI 명령 | 채팅 + 캔버스 |
-
-dashboard가 메인 서비스. aproc CLI는 로컬 트리거/디버그 용도로 유지.
-
----
-
-## 10. 다음 작업
-
-1. Hono + opencode SDK 연결 + `/api/tree` 엔드포인트
-2. SQLite + Drizzle `canvas_node` 테이블 세팅
-3. React Flow 캔버스 기본 구조 + dagre 레이아웃
-4. SSE 파이프라인 (opencode global event → Zustand → 캔버스)
-5. 사이드 패널 채팅 UI
+| DB | SQLite (WAL) | 오버레이 전용 — opencode가 session 상태의 source of truth |
+| AI 엔진 | opencode SDK (`@opencode-ai/sdk`) | session 트리가 process 계층의 source of truth |
