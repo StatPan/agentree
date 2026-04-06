@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   type Node,
+  type Connection,
   type ReactFlowInstance,
   ReactFlow,
   Background,
@@ -14,6 +15,119 @@ import { useAgentStore } from '../store/agentStore'
 import { AgentNode } from './AgentNode'
 import { AgentEdge } from './AgentEdge'
 import { GroupHeaderNode } from './GroupHeaderNode'
+
+type ConnRelationType = 'linked' | 'merged-view' | 'detached'
+
+const RELATION_COLORS: Record<ConnRelationType, string> = {
+  linked: '#818cf8',
+  'merged-view': '#a78bfa',
+  detached: '#6b7280',
+}
+
+function ConnectDialog({
+  source,
+  target,
+  onConfirm,
+  onCancel,
+}: {
+  source: string
+  target: string
+  onConfirm: (type: ConnRelationType) => Promise<void>
+  onCancel: () => void
+}) {
+  const [selected, setSelected] = useState<ConnRelationType>('linked')
+  const [connecting, setConnecting] = useState(false)
+
+  async function handleConfirm() {
+    setConnecting(true)
+    await onConfirm(selected)
+    setConnecting(false)
+  }
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 1000,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        pointerEvents: 'none',
+      }}
+    >
+      <div
+        style={{
+          background: '#111',
+          border: '1px solid #334155',
+          borderRadius: 12,
+          padding: '18px 22px',
+          minWidth: 220,
+          boxShadow: '0 16px 40px rgba(0,0,0,0.5)',
+          pointerEvents: 'all',
+        }}
+      >
+        <div style={{ color: '#94a3b8', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 14 }}>
+          Connect as
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
+          {(['linked', 'merged-view', 'detached'] as const).map((type) => (
+            <label
+              key={type}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, color: selected === type ? '#e5e7eb' : '#6b7280' }}
+            >
+              <input
+                type="radio"
+                name={`conn-${source}-${target}`}
+                value={type}
+                checked={selected === type}
+                onChange={() => setSelected(type)}
+                style={{ accentColor: RELATION_COLORS[type] }}
+              />
+              <span style={{ fontFamily: 'monospace', fontSize: 12, color: RELATION_COLORS[type] }}>
+                {type}
+              </span>
+            </label>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => void handleConfirm()}
+            disabled={connecting}
+            style={{
+              flex: 1,
+              background: connecting ? '#1f2937' : '#1d4ed8',
+              color: connecting ? '#4b5563' : '#eff6ff',
+              border: 'none',
+              borderRadius: 8,
+              padding: '7px 0',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: connecting ? 'default' : 'pointer',
+            }}
+          >
+            {connecting ? '…' : 'Connect'}
+          </button>
+          <button
+            onClick={onCancel}
+            disabled={connecting}
+            style={{
+              background: 'none',
+              color: '#6b7280',
+              border: '1px solid #374151',
+              borderRadius: 8,
+              padding: '7px 14px',
+              fontSize: 12,
+              cursor: connecting ? 'default' : 'pointer',
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 const nodeTypes: NodeTypes = {
   agentNode: AgentNode as NodeTypes[string],
@@ -34,8 +148,16 @@ export function AgentCanvas() {
     setViewMode,
     onNodesChange,
     pinNode,
+    addRelation,
   } = useAgentStore()
   const hasFramedInitialView = useRef(false)
+  const [pendingConn, setPendingConn] = useState<{ source: string; target: string } | null>(null)
+
+  const onConnect = useCallback((connection: Connection) => {
+    if (!connection.source || !connection.target) return
+    if (connection.source === connection.target) return
+    setPendingConn({ source: connection.source, target: connection.target })
+  }, [])
   const previousViewMode = useRef(viewMode)
   const reactFlowRef = useRef<ReactFlowInstance<Node> | null>(null)
 
@@ -221,6 +343,7 @@ export function AgentCanvas() {
           }).catch(console.error)
         }}
         onPaneClick={() => setSelectedSession(null)}
+        onConnect={onConnect}
         colorMode="dark"
         minZoom={0.1}
         maxZoom={2}
@@ -240,6 +363,17 @@ export function AgentCanvas() {
           }}
         />
       </ReactFlow>
+      {pendingConn && (
+        <ConnectDialog
+          source={pendingConn.source}
+          target={pendingConn.target}
+          onConfirm={async (type) => {
+            await addRelation(pendingConn.source, pendingConn.target, type)
+            setPendingConn(null)
+          }}
+          onCancel={() => setPendingConn(null)}
+        />
+      )}
     </div>
   )
 }

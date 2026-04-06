@@ -1,3 +1,17 @@
+/* Handle visibility — hidden by default, shown on hover or during connection drag */
+.react-flow__handle {
+  opacity: 0;
+  transition: opacity 0.15s;
+  width: 10px !important;
+  height: 10px !important;
+}
+.react-flow__node:hover .react-flow__handle,
+.react-flow__handle.connectingfrom,
+.react-flow__handle.connectingto,
+.react-flow__handle.valid {
+  opacity: 1;
+}
+
 @keyframes agentree-blink {
   0%, 100% { opacity: 0.25; }
   50% { opacity: 1; }
