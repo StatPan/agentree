@@ -55,3 +55,9 @@ sessionRouter.post('/api/session/:id/abort', async (c) => {
   await opencodeAdapter.abortSession(sessionID)
   return c.json({ ok: true })
 })
+
+sessionRouter.delete('/api/session/:id', async (c) => {
+  const sessionID = c.req.param('id')
+  await opencodeAdapter.deleteSession(sessionID)
+  return c.json({ ok: true })
+})

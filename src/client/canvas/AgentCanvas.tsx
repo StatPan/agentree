@@ -1,4 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+
+async function fetchJson(url: string, options?: RequestInit) {
+  const res = await fetch(url, options)
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  return res.json()
+}
 import {
   type Node,
   type Connection,
@@ -160,8 +166,7 @@ export function AgentCanvas() {
   const reactFlowRef = useRef<ReactFlowInstance<Node> | null>(null)
 
   async function reloadTree() {
-    const response = await fetch('/api/tree')
-    const data = await response.json()
+    const data = await fetchJson('/api/tree')
     applySessionTree(data)
   }
 
@@ -237,12 +242,11 @@ export function AgentCanvas() {
           <button
             onClick={() => {
               const title = window.prompt('New session title (optional)') ?? ''
-              fetch('/api/session', {
+              fetchJson('/api/session', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ title: title.trim() || undefined }),
               })
-                .then((response) => response.json())
                 .then((session) => {
                   if (session?.id) setSelectedSession(session.id)
                   return reloadTree()

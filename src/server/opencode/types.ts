@@ -91,6 +91,7 @@ export interface OpencodeAdapter {
   forkSession(input: ForkSessionInput): Promise<AgentreeSession>
   sendSubtask(input: SubtaskInput): Promise<void>
   abortSession(sessionID: string): Promise<void>
+  deleteSession(sessionID: string): Promise<void>
   replyPermission(requestID: string, reply: PermissionReply, message?: string): Promise<void>
   replyQuestion(requestID: string, answers: string[]): Promise<void>
   rejectQuestion(requestID: string): Promise<void>

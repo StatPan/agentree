@@ -52,6 +52,12 @@ type SessionDetails = {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+async function fetchJson(url: string, options?: RequestInit) {
+  const res = await fetch(url, options)
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  return res.json()
+}
+
 function formatTime(value?: number) {
   if (!value) return ''
   return new Date(value).toLocaleString()
@@ -543,8 +549,8 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
     setQuestionAnswer('')
 
     Promise.all([
-      fetch(`/api/session/${sessionId}`).then((r) => r.json()),
-      fetch(`/api/session/${sessionId}/messages?limit=50`).then((r) => r.json()),
+      fetchJson(`/api/session/${sessionId}`),
+      fetchJson(`/api/session/${sessionId}/messages?limit=50`),
     ])
       .then(([sessionData, messagesData]) => {
         if (cancelled) return
@@ -574,14 +580,12 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
   }, [lastActivity]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function refreshTree() {
-    const response = await fetch('/api/tree')
-    const data = await response.json()
+    const data = await fetchJson('/api/tree')
     applySessionTree(data)
   }
 
   async function refreshMessages() {
-    const res = await fetch(`/api/session/${sessionId}/messages?limit=50`)
-    const data = await res.json()
+    const data = await fetchJson(`/api/session/${sessionId}/messages?limit=50`)
     setMessages(Array.isArray(data) ? data : [])
   }
 
@@ -619,13 +623,17 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
   async function forkSession() {
     setError(null)
     try {
-      const response = await fetch(`/api/session/${sessionId}/fork`, {
+      // Lock the current label before forking so opencode's title rename (#1) doesn't affect canvas display
+      await fetch(`/api/canvas/${sessionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: title }),
+      })
+      const data = await fetchJson(`/api/session/${sessionId}/fork`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       })
-      const data = await response.json()
-      if (!response.ok) throw new Error('Failed to fork session')
       await refreshTree()
       if (data?.id) setSelectedSession(data.id)
     } catch (err) {
@@ -727,7 +735,21 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
       >
         {/* Header */}
         <div style={{ padding: '14px 16px', borderBottom: '1px solid #1f2937' }}>
-          <div style={{ color: '#f3f4f6', fontSize: 14, fontWeight: 600 }}>{title}</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ color: '#f3f4f6', fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{title}</div>
+            <button
+              onClick={() => {
+                if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return
+                fetch(`/api/session/${sessionId}`, { method: 'DELETE' })
+                  .then(() => setSelectedSession(null))
+                  .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+              }}
+              title="Delete session"
+              style={{ background: 'none', border: 'none', color: '#4b5563', fontSize: 16, cursor: 'pointer', padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}
+            >
+              ␡
+            </button>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
             <span style={{ color: '#9ca3af', fontSize: 12, fontFamily: 'monospace' }}>{sessionId}</span>
             <span
@@ -992,8 +1014,14 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                void sendPrompt()
+              }
+            }}
             rows={4}
-            placeholder="Send a prompt to this session"
+            placeholder="Send a prompt to this session (Shift+Enter for newline)"
             style={inputStyle}
           />
           <div style={{ display: 'flex', gap: 8 }}>

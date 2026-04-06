@@ -483,19 +483,23 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   diffBySession: {},
 
   addRelation: async (fromSessionId, toSessionId, relationType) => {
-    await fetch('/api/relation', {
+    const res = await fetch('/api/relation', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fromSessionId, toSessionId, relationType }),
     })
-    const data = await fetch('/api/tree').then((r) => r.json())
-    get().applySessionTree(data)
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+    const treeRes = await fetch('/api/tree')
+    if (!treeRes.ok) throw new Error(`${treeRes.status} ${treeRes.statusText}`)
+    get().applySessionTree(await treeRes.json())
   },
 
   removeRelation: async (id) => {
-    await fetch(`/api/relation/${id}`, { method: 'DELETE' })
-    const data = await fetch('/api/tree').then((r) => r.json())
-    get().applySessionTree(data)
+    const res = await fetch(`/api/relation/${id}`, { method: 'DELETE' })
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+    const treeRes = await fetch('/api/tree')
+    if (!treeRes.ok) throw new Error(`${treeRes.status} ${treeRes.statusText}`)
+    get().applySessionTree(await treeRes.json())
   },
 
   setSelectedSession: (id) => set({ selectedSessionId: id }),

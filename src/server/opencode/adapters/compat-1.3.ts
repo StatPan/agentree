@@ -117,6 +117,11 @@ export const compat13Adapter: OpencodeAdapter = {
     if (result.error) throw new Error(String(result.error))
   },
 
+  async deleteSession(sessionID) {
+    const result = await opencode.session.delete({ sessionID })
+    if (result.error) throw new Error(String(result.error))
+  },
+
   async replyPermission(requestID: string, reply: PermissionReply, message?: string) {
     const result = await opencode.permission.reply({ requestID, reply, ...(message ? { message } : {}) })
     if (result.error) throw new Error(String(result.error))
