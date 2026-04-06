@@ -9,12 +9,12 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0',
-    port: 5173,
+    port: 5174,
     strictPort: true,
     allowedHosts: ['statpan-main'],
     hmr: {
       host: 'statpan-main',
-      clientPort: 5173,
+      clientPort: 5174,
     },
     proxy: {
       '/api': {

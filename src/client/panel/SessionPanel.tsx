@@ -453,6 +453,9 @@ function TodoList({ todos }: { todos: TodoItem[] }) {
   )
 }
 
+const EMPTY_TODOS: TodoItem[] = []
+const EMPTY_DIFF = null
+
 // ─── Main panel ───────────────────────────────────────────────────────────────
 
 export function SessionPanel({ sessionId }: { sessionId: string }) {
@@ -464,8 +467,8 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
   const pendingPermissions = useAgentStore((s) => s.pendingPermissions)
   const pendingQuestions = useAgentStore((s) => s.pendingQuestions)
   const nodes = useAgentStore((s) => s.nodes)
-  const todos = useAgentStore((s) => s.todosBySession[sessionId] ?? [])
-  const diff = useAgentStore((s) => s.diffBySession[sessionId] ?? null)
+  const todos = useAgentStore((s) => s.todosBySession[sessionId] ?? EMPTY_TODOS)
+  const diff = useAgentStore((s) => s.diffBySession[sessionId] ?? EMPTY_DIFF)
   const allRelations = useAgentStore((s) => s.relations)
   const lastActivity = useAgentStore((s) => s.lastActivityBySession[sessionId])
   const setSelectedSession = useAgentStore((s) => s.setSelectedSession)

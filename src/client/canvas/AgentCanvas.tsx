@@ -136,20 +136,18 @@ const nodeTypes: NodeTypes = {
 const edgeTypes: EdgeTypes = { agentEdge: AgentEdge as EdgeTypes[string] }
 
 export function AgentCanvas() {
-  const {
-    viewMode,
-    nodes,
-    edges,
-    groupHeaders,
-    compat,
-    applySessionTree,
-    applyEvent,
-    setSelectedSession,
-    setViewMode,
-    onNodesChange,
-    pinNode,
-    addRelation,
-  } = useAgentStore()
+  const viewMode = useAgentStore((s) => s.viewMode)
+  const nodes = useAgentStore((s) => s.nodes)
+  const edges = useAgentStore((s) => s.edges)
+  const groupHeaders = useAgentStore((s) => s.groupHeaders)
+  const compat = useAgentStore((s) => s.compat)
+  const applySessionTree = useAgentStore((s) => s.applySessionTree)
+  const applyEvent = useAgentStore((s) => s.applyEvent)
+  const setSelectedSession = useAgentStore((s) => s.setSelectedSession)
+  const setViewMode = useAgentStore((s) => s.setViewMode)
+  const onNodesChange = useAgentStore((s) => s.onNodesChange)
+  const pinNode = useAgentStore((s) => s.pinNode)
+  const addRelation = useAgentStore((s) => s.addRelation)
   const hasFramedInitialView = useRef(false)
   const [pendingConn, setPendingConn] = useState<{ source: string; target: string } | null>(null)
 

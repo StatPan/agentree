@@ -56,7 +56,7 @@ export const compat13Adapter: OpencodeAdapter = {
   },
 
   async sendPrompt(sessionID, text) {
-    const result = await opencode.session.prompt({
+    const result = await opencode.session.promptAsync({
       sessionID,
       parts: [{ type: 'text', text }],
     })
@@ -99,7 +99,7 @@ export const compat13Adapter: OpencodeAdapter = {
   },
 
   async sendSubtask(input: SubtaskInput) {
-    const result = await opencode.session.prompt({
+    const result = await opencode.session.promptAsync({
       sessionID: input.sessionID,
       parts: [{
         type: 'subtask',

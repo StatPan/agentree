@@ -594,7 +594,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
           const lastActivityBySession =
             sessionId && event.type === 'session.idle'
-              ? { ...state.lastActivityBySession, [sessionId]: '' }
+              ? { ...state.lastActivityBySession, [sessionId]: `idle-${Date.now()}` }
               : state.lastActivityBySession
 
           return {
