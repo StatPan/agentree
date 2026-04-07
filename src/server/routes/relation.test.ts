@@ -39,17 +39,44 @@ describe('POST /api/relation', () => {
     expect(saveSessionRelation).not.toHaveBeenCalled()
   })
 
-  it('accepts merged-view and detached types', async () => {
-    for (const type of ['merged-view', 'detached'] as const) {
-      vi.clearAllMocks()
-      const res = await app.request('/api/relation', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fromSessionId: 'a', toSessionId: 'b', relationType: type }),
-      })
-      expect(res.status).toBe(200)
-      expect(saveSessionRelation).toHaveBeenCalledWith('a', 'b', type)
-    }
+  it('accepts detached type', async () => {
+    const res = await app.request('/api/relation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fromSessionId: 'a', toSessionId: 'b', relationType: 'detached' }),
+    })
+    expect(res.status).toBe(200)
+    expect(saveSessionRelation).toHaveBeenCalledWith('a', 'b', 'detached')
+  })
+
+  it('rejects self-relation', async () => {
+    const res = await app.request('/api/relation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fromSessionId: 'a', toSessionId: 'a', relationType: 'linked' }),
+    })
+    expect(res.status).toBe(400)
+    expect(saveSessionRelation).not.toHaveBeenCalled()
+  })
+
+  it('rejects invalid relation type', async () => {
+    const res = await app.request('/api/relation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fromSessionId: 'a', toSessionId: 'b', relationType: 'invalid' }),
+    })
+    expect(res.status).toBe(400)
+    expect(saveSessionRelation).not.toHaveBeenCalled()
+  })
+
+  it('rejects missing required fields', async () => {
+    const res = await app.request('/api/relation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fromSessionId: 'a' }),
+    })
+    expect(res.status).toBe(400)
+    expect(saveSessionRelation).not.toHaveBeenCalled()
   })
 })
 
