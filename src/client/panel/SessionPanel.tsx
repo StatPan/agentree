@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAgentStore } from '../store/agentStore'
+import { fetchJson } from '../utils/fetchJson'
+import { SessionActions, RevertToHereButton } from './SessionActions'
+import { DiffView } from './DiffView'
+import { PeerReviewSection } from './PeerReviewSection'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -52,12 +56,6 @@ type SessionDetails = {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-async function fetchJson(url: string, options?: RequestInit) {
-  const res = await fetch(url, options)
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
-  return res.json()
-}
-
 function formatTime(value?: number) {
   if (!value) return ''
   return new Date(value).toLocaleString()
@@ -94,7 +92,7 @@ function summarize(value: unknown, maxLen = 120): string {
 
 // ─── Style helpers ────────────────────────────────────────────────────────────
 
-function smallBtn(bg: string, color: string) {
+export function smallBtn(bg: string, color: string) {
   return {
     appearance: 'none' as const,
     border: 'none',
@@ -493,7 +491,7 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
   const [error, setError] = useState<string | null>(null)
   const [linkOpen, setLinkOpen] = useState(false)
   const [linkTarget, setLinkTarget] = useState('')
-  const [linkType, setLinkType] = useState<'linked' | 'merged-view' | 'detached'>('linked')
+  const [linkType, setLinkType] = useState<'linked' | 'detached'>('linked')
 
   const status = node?.data.status ?? 'idle'
   const title = node?.data.label || session?.title || `${sessionId.slice(0, 8)}…`
@@ -610,13 +608,19 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
     }
   }
 
+  const [aborting, setAborting] = useState(false)
+
   async function abortSession() {
+    if (!window.confirm('Abort running session?')) return
     setError(null)
+    setAborting(true)
     try {
       const res = await fetch(`/api/session/${sessionId}/abort`, { method: 'POST' })
       if (!res.ok) throw new Error('Failed to abort session')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setAborting(false)
     }
   }
 
@@ -684,11 +688,16 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
     const p = pendingPermissions[childId] as { requestID?: string; id?: string } | undefined
     const requestID = p?.requestID ?? p?.id
     if (!requestID) return
-    await fetch(`/api/permission/${requestID}/reply`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reply }),
-    })
+    try {
+      const res = await fetch(`/api/permission/${requestID}/reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reply }),
+      })
+      if (!res.ok) setError(`Child permission reply failed (${res.status})`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Child permission reply failed')
+    }
   }
 
   async function submitChildQuestion(childId: string) {
@@ -697,19 +706,29 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
     const firstQ = q?.questions?.[0]
     const answer = childAnswers[childId]?.trim()
     if (!requestID || !firstQ?.id || !answer) return
-    await fetch(`/api/question/${requestID}/reply`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ answers: [{ questionID: firstQ.id, value: answer }] }),
-    })
-    setChildAnswers((prev) => { const next = { ...prev }; delete next[childId]; return next })
+    try {
+      const res = await fetch(`/api/question/${requestID}/reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answers: [{ questionID: firstQ.id, value: answer }] }),
+      })
+      if (!res.ok) setError(`Child question reply failed (${res.status})`)
+      else setChildAnswers((prev) => { const next = { ...prev }; delete next[childId]; return next })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Child question reply failed')
+    }
   }
 
   async function rejectChildQuestion(childId: string) {
     const q = pendingQuestions[childId] as { requestID?: string; id?: string } | undefined
     const requestID = q?.requestID ?? q?.id
     if (!requestID) return
-    await fetch(`/api/question/${requestID}/reject`, { method: 'POST' })
+    try {
+      const res = await fetch(`/api/question/${requestID}/reject`, { method: 'POST' })
+      if (!res.ok) setError(`Child question reject failed (${res.status})`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Child question reject failed')
+    }
   }
 
   return (
@@ -796,6 +815,8 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
             </div>
           )}
 
+          <DiffView sessionId={sessionId} />
+
           {/* Session metadata */}
           {hasMetadata && (
             <div style={{ marginTop: 10, background: '#0d1117', borderRadius: 6, padding: '8px 10px', fontSize: 10, fontFamily: 'monospace', display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -826,10 +847,15 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button onClick={() => setSubtaskTargetSession(sessionId)} style={buttonStyle('#2563eb', '#fff')}>Spawn subtask</button>
-            <button onClick={() => void forkSession()} style={buttonStyle('#0f766e', '#fff')}>Fork session</button>
-          </div>
+          <SessionActions
+            sessionId={sessionId}
+            status={status}
+            onFork={() => forkSession()}
+            onSubtask={() => setSubtaskTargetSession(sessionId)}
+            onRefreshMessages={() => refreshMessages()}
+            onRefreshTree={() => refreshTree()}
+            onError={(msg) => setError(msg)}
+          />
         </div>
 
         {/* Permission */}
@@ -897,6 +923,9 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
           </div>
         )}
 
+        {/* Peer review */}
+        <PeerReviewSection sessionId={sessionId} />
+
         {/* Todos */}
         {todos.length > 0 && <TodoList todos={todos} />}
 
@@ -917,7 +946,7 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
             const otherId = rel.from_session_id === sessionId ? rel.to_session_id : rel.from_session_id
             const otherNode = nodes.find((n) => n.id === otherId)
             const otherLabel = (otherNode?.data.label as string | undefined) ?? sessions.find((s) => s.id === otherId)?.title ?? `${otherId.slice(0, 8)}…`
-            const typeColor = rel.relation_type === 'linked' ? '#818cf8' : rel.relation_type === 'merged-view' ? '#a78bfa' : '#6b7280'
+            const typeColor = rel.relation_type === 'linked' ? '#818cf8' : '#6b7280'
             const direction = rel.from_session_id === sessionId ? '→' : '←'
             return (
               <div key={rel.id} style={{ padding: '4px 16px 4px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
@@ -951,11 +980,10 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
               </select>
               <select
                 value={linkType}
-                onChange={(e) => setLinkType(e.target.value as 'linked' | 'merged-view' | 'detached')}
+                onChange={(e) => setLinkType(e.target.value as 'linked' | 'detached')}
                 style={{ background: '#0b0b0b', color: '#e5e7eb', border: '1px solid #27272a', borderRadius: 6, padding: '5px 7px', fontSize: 11, width: '100%' }}
               >
                 <option value="linked">linked</option>
-                <option value="merged-view">merged-view</option>
                 <option value="detached">detached</option>
               </select>
               <div style={{ display: 'flex', gap: 6 }}>
@@ -998,7 +1026,16 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
                   <span style={{ color: '#e5e7eb', fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>
                     {message.info.role}
                   </span>
-                  <span style={{ color: '#6b7280', fontSize: 11 }}>{formatTime(message.info.time?.created)}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {message.info.role === 'assistant' && (
+                      <RevertToHereButton
+                        sessionId={sessionId}
+                        messageID={message.info.id}
+                        onDone={async () => { await refreshMessages(); await refreshTree() }}
+                      />
+                    )}
+                    <span style={{ color: '#6b7280', fontSize: 11 }}>{formatTime(message.info.time?.created)}</span>
+                  </span>
                 </div>
                 <MessagePartList parts={message.parts} />
                 {message.info.error?.data?.message && (
@@ -1031,7 +1068,7 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
             <button onClick={() => void sendPrompt()} disabled={sending} style={buttonStyle('#3b82f6', '#fff')}>
               {sending ? 'Sending…' : 'Send'}
             </button>
-            <button onClick={() => void abortSession()} style={buttonStyle('#374151', '#fff')}>Abort</button>
+            <button onClick={() => void abortSession()} disabled={aborting} style={buttonStyle('#374151', '#fff')}>{aborting ? 'Aborting...' : 'Abort'}</button>
           </div>
         </div>
       </div>

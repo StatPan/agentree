@@ -9,6 +9,7 @@ type RawSession = {
     created: number
     updated: number
   }
+  share?: { url: string } | null
 }
 
 type RawStatus =
@@ -24,6 +25,7 @@ export function normalizeSession(session: RawSession): AgentreeSession {
     parentID: session.parentID ?? null,
     directory: session.directory,
     time: session.time,
+    ...(session.share ? { share: session.share } : {}),
   }
 }
 

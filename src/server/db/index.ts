@@ -2,7 +2,7 @@ import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { canvasNode, sessionFork, sessionRelation } from './schema.js'
 import type { RelationType } from './schema.js'
-import { eq } from 'drizzle-orm'
+import { eq, or } from 'drizzle-orm'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -12,6 +12,7 @@ const DB_PATH = process.env.DB_PATH ?? path.join(__dirname, '..', '..', '..', 'a
 const sqlite = new Database(DB_PATH)
 sqlite.pragma('journal_mode = WAL')
 sqlite.pragma('foreign_keys = ON')
+sqlite.exec(`UPDATE session_relation SET relation_type = 'linked' WHERE relation_type = 'merged-view'`)
 
 export const db = drizzle(sqlite, { schema: { canvasNode, sessionFork, sessionRelation } })
 
@@ -99,4 +100,15 @@ export function getAllSessionRelations() {
 
 export function deleteSessionRelation(id: number): void {
   db.delete(sessionRelation).where(eq(sessionRelation.id, id)).run()
+}
+
+export function cleanupSessionData(sessionId: string): void {
+  db.delete(canvasNode).where(eq(canvasNode.session_id, sessionId)).run()
+  db.delete(sessionFork).where(eq(sessionFork.session_id, sessionId)).run()
+  db.delete(sessionRelation).where(
+    or(
+      eq(sessionRelation.from_session_id, sessionId),
+      eq(sessionRelation.to_session_id, sessionId),
+    ),
+  ).run()
 }

@@ -5,11 +5,19 @@ import { opencodeAdapter } from '../opencode/index.js'
 export const treeRouter = new Hono()
 
 treeRouter.get('/api/tree', async (c) => {
-  const [sessions, statusBySession, compat] = await Promise.all([
+  const [sessionsResult, statusResult, compatResult] = await Promise.allSettled([
     opencodeAdapter.listSessions(),
     opencodeAdapter.listStatuses(),
     opencodeAdapter.getCompatReport(),
   ])
+  if (sessionsResult.status === 'rejected') {
+    const reason = sessionsResult.reason instanceof Error ? sessionsResult.reason.message : String(sessionsResult.reason)
+    console.error('[tree] Failed to load sessions:', reason)
+    return c.json({ error: `Failed to load sessions: ${reason}` }, 502)
+  }
+  const sessions = sessionsResult.value
+  const statusBySession = statusResult.status === 'fulfilled' ? statusResult.value : {}
+  const compat = compatResult.status === 'fulfilled' ? compatResult.value : null
   const canvasBySession = new Map(
     getAllCanvasNodes().map((node) => [
       node.session_id,

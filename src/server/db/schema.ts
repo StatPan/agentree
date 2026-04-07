@@ -28,4 +28,4 @@ export type InsertCanvasNode = typeof canvasNode.$inferInsert
 export type SessionFork = typeof sessionFork.$inferSelect
 export type SessionRelation = typeof sessionRelation.$inferSelect
 export type InsertSessionRelation = typeof sessionRelation.$inferInsert
-export type RelationType = 'fork' | 'linked' | 'detached' | 'merged-view'
+export type RelationType = 'fork' | 'linked' | 'detached'

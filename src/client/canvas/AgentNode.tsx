@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import type { AgentNodeData, NodeStatus } from '../store/agentStore'
 import { useAgentStore } from '../store/agentStore'
+import { fetchJson } from '../utils/fetchJson'
 
 const STATUS_COLOR: Record<NodeStatus, string> = {
   running: '#22c55e',
@@ -21,12 +22,6 @@ export function AgentNode({ data, selected }: NodeProps) {
   const setSelectedSession = useAgentStore((state) => state.setSelectedSession)
   const setSubtaskTargetSession = useAgentStore((state) => state.setSubtaskTargetSession)
   const applySessionTree = useAgentStore((state) => state.applySessionTree)
-
-  async function fetchJson(url: string, options?: RequestInit) {
-    const res = await fetch(url, options)
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
-    return res.json()
-  }
 
   async function refreshTree() {
     const tree = await fetchJson('/api/tree')

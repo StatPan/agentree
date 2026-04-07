@@ -4,7 +4,7 @@ import { create } from 'zustand'
 
 export type NodeStatus = 'running' | 'needs-permission' | 'needs-answer' | 'idle' | 'done' | 'failed'
 export type ViewMode = 'recent' | 'all'
-export type RelationType = 'fork' | 'linked' | 'detached' | 'merged-view'
+export type RelationType = 'fork' | 'linked' | 'detached'
 
 export type SessionRelation = {
   id: number
@@ -170,10 +170,13 @@ function layoutSubtree(nodes: Node<AgentNodeData>[], edges: Edge[]) {
 
 function collectSubtreeIds(rootId: string, childrenByParent: Map<string, string[]>) {
   const result: string[] = []
+  const visited = new Set<string>()
   const queue = [rootId]
 
   while (queue.length > 0) {
     const current = queue.shift()!
+    if (visited.has(current)) continue
+    visited.add(current)
     result.push(current)
     const children = childrenByParent.get(current) ?? []
     for (const child of children) queue.push(child)
@@ -333,8 +336,6 @@ function edgeStyleForRelationType(type: RelationType, base: ReturnType<typeof ed
       return { animated: base.animated, style: { ...base.style, stroke: base.style.stroke === '#374151' ? '#14b8a6' : base.style.stroke, strokeDasharray: '8 4' } }
     case 'linked':
       return { animated: base.animated, style: { ...base.style, stroke: base.style.stroke === '#374151' ? '#818cf8' : base.style.stroke, strokeDasharray: '4 2' } }
-    case 'merged-view':
-      return { animated: base.animated, style: { ...base.style, stroke: base.style.stroke === '#374151' ? '#a78bfa' : base.style.stroke } }
     case 'detached':
       return { animated: base.animated, style: { ...base.style, stroke: '#6b7280', strokeDasharray: '2 6' } }
     default:
@@ -413,9 +414,11 @@ function buildGraph(
       }
     })
 
-  // Add overlay relation edges (linked, merged-view, detached)
+  // Add overlay relation edges (linked, detached) — skip orphaned relations
+  const sessionIds = new Set(sessions.map((s) => s.id))
   for (const rel of relations) {
     if (rel.relation_type === 'fork') continue
+    if (!sessionIds.has(rel.from_session_id) || !sessionIds.has(rel.to_session_id)) continue
     const base = edgeStyleForStatus('idle')
     rawEdges.push({
       id: `rel-${rel.id}`,

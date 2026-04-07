@@ -52,7 +52,7 @@ describe('session_relation DB functions', () => {
 
   it('saves multiple relations independently', () => {
     db.saveRelation('a', 'b', 'linked')
-    db.saveRelation('a', 'c', 'merged-view')
+    db.saveRelation('a', 'c', 'detached')
     db.saveRelation('b', 'c', 'detached')
     expect(db.getAll()).toHaveLength(3)
   })

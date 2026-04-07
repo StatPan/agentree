@@ -1,10 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-
-async function fetchJson(url: string, options?: RequestInit) {
-  const res = await fetch(url, options)
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
-  return res.json()
-}
+import { fetchJson } from '../utils/fetchJson'
 import {
   type Node,
   type Connection,
@@ -22,11 +17,10 @@ import { AgentNode } from './AgentNode'
 import { AgentEdge } from './AgentEdge'
 import { GroupHeaderNode } from './GroupHeaderNode'
 
-type ConnRelationType = 'linked' | 'merged-view' | 'detached'
+type ConnRelationType = 'linked' | 'detached'
 
 const RELATION_COLORS: Record<ConnRelationType, string> = {
   linked: '#818cf8',
-  'merged-view': '#a78bfa',
   detached: '#6b7280',
 }
 
@@ -77,7 +71,7 @@ function ConnectDialog({
           Connect as
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
-          {(['linked', 'merged-view', 'detached'] as const).map((type) => (
+          {(['linked', 'detached'] as const).map((type) => (
             <label
               key={type}
               style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, color: selected === type ? '#e5e7eb' : '#6b7280' }}
@@ -156,6 +150,7 @@ export function AgentCanvas() {
   const addRelation = useAgentStore((s) => s.addRelation)
   const hasFramedInitialView = useRef(false)
   const [pendingConn, setPendingConn] = useState<{ source: string; target: string } | null>(null)
+  const [treeError, setTreeError] = useState<string | null>(null)
 
   const onConnect = useCallback((connection: Connection) => {
     if (!connection.source || !connection.target) return
@@ -166,8 +161,13 @@ export function AgentCanvas() {
   const reactFlowRef = useRef<ReactFlowInstance<Node> | null>(null)
 
   async function reloadTree() {
-    const data = await fetchJson('/api/tree')
-    applySessionTree(data)
+    try {
+      const data = await fetchJson('/api/tree')
+      applySessionTree(data)
+      setTreeError(null)
+    } catch (err) {
+      setTreeError(err instanceof Error ? err.message : 'Failed to load sessions')
+    }
   }
 
   const displayNodes = useMemo<Node[]>(
@@ -195,12 +195,30 @@ export function AgentCanvas() {
   }, [applySessionTree])
 
   useEffect(() => {
-    const es = new EventSource('/api/events')
-    es.onmessage = (e) => {
-      try { applyEvent(JSON.parse(e.data)) } catch {}
+    let es: EventSource | null = null
+    let cancelled = false
+    let retryTimeout: ReturnType<typeof setTimeout> | null = null
+
+    function connect() {
+      if (cancelled) return
+      es = new EventSource('/api/events')
+      es.onmessage = (e) => {
+        try { applyEvent(JSON.parse(e.data)) } catch (err) { console.warn('[sse] failed to parse event:', err) }
+      }
+      es.onerror = () => {
+        console.warn('[sse] connection lost, reconnecting in 3s...')
+        es?.close()
+        es = null
+        if (!cancelled) retryTimeout = setTimeout(connect, 3000)
+      }
     }
-    es.onerror = () => console.warn('[sse] connection issue')
-    return () => es.close()
+
+    connect()
+    return () => {
+      cancelled = true
+      if (retryTimeout) clearTimeout(retryTimeout)
+      es?.close()
+    }
   }, [applyEvent])
 
   useEffect(() => {
@@ -222,6 +240,18 @@ export function AgentCanvas() {
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+      {treeError && (
+        <div style={{
+          position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 20,
+          background: '#7f1d1d', color: '#fca5a5', padding: '8px 16px', borderRadius: 8,
+          fontSize: 12, display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <span>Failed to load: {treeError}</span>
+          <button onClick={() => void reloadTree()} style={{ background: 'none', border: '1px solid #fca5a5', color: '#fca5a5', borderRadius: 4, fontSize: 11, cursor: 'pointer', padding: '2px 8px' }}>
+            Retry
+          </button>
+        </div>
+      )}
       <div
         style={{
           position: 'absolute',

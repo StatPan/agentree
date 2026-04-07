@@ -61,15 +61,6 @@ describe('buildGraph — relation edges on canvas', () => {
     expect((relEdge?.style as { stroke?: string } | undefined)?.stroke).toBe('#818cf8')
   })
 
-  it('merged-view edge has violet stroke (#a78bfa)', () => {
-    useAgentStore.getState().applySessionTree({
-      sessions: [session('a'), session('b')],
-      relations: [relation(2, 'a', 'b', 'merged-view')],
-    })
-    const relEdge = useAgentStore.getState().edges.find((e) => e.id === 'rel-2')
-    expect((relEdge?.style as { stroke?: string } | undefined)?.stroke).toBe('#a78bfa')
-  })
-
   it('detached edge has gray stroke (#6b7280)', () => {
     useAgentStore.getState().applySessionTree({
       sessions: [session('a'), session('b')],

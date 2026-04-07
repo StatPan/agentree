@@ -64,11 +64,16 @@ export function ApprovalQueue() {
   async function replyPermission(sessionId: string, reply: 'once' | 'always' | 'reject') {
     const requestID = getRequestID(pendingPermissions[sessionId])
     if (!requestID) return
-    await fetch(`/api/permission/${requestID}/reply`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reply }),
-    })
+    try {
+      const res = await fetch(`/api/permission/${requestID}/reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reply }),
+      })
+      if (!res.ok) console.error('[ApprovalQueue] permission reply failed:', res.status)
+    } catch (err) {
+      console.error('[ApprovalQueue] permission reply error:', err)
+    }
   }
 
   async function submitQuestion(sessionId: string) {
@@ -77,18 +82,28 @@ export function ApprovalQueue() {
     const firstQuestion = payload.questions?.[0]
     const answer = questionAnswers[sessionId]?.trim()
     if (!requestID || !firstQuestion?.id || !answer) return
-    await fetch(`/api/question/${requestID}/reply`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ answers: [{ questionID: firstQuestion.id, value: answer }] }),
-    })
-    setQuestionAnswers((prev) => { const next = { ...prev }; delete next[sessionId]; return next })
+    try {
+      const res = await fetch(`/api/question/${requestID}/reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answers: [{ questionID: firstQuestion.id, value: answer }] }),
+      })
+      if (!res.ok) console.error('[ApprovalQueue] question reply failed:', res.status)
+      else setQuestionAnswers((prev) => { const next = { ...prev }; delete next[sessionId]; return next })
+    } catch (err) {
+      console.error('[ApprovalQueue] question reply error:', err)
+    }
   }
 
   async function rejectQuestion(sessionId: string) {
     const requestID = getRequestID(pendingQuestions[sessionId])
     if (!requestID) return
-    await fetch(`/api/question/${requestID}/reject`, { method: 'POST' })
+    try {
+      const res = await fetch(`/api/question/${requestID}/reject`, { method: 'POST' })
+      if (!res.ok) console.error('[ApprovalQueue] question reject failed:', res.status)
+    } catch (err) {
+      console.error('[ApprovalQueue] question reject error:', err)
+    }
   }
 
   return (

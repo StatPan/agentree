@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { saveSessionFork, saveSessionRelation } from '../db/index.js'
+import { saveSessionFork, saveSessionRelation, cleanupSessionData } from '../db/index.js'
 import { opencodeAdapter } from '../opencode/index.js'
 
 export const sessionRouter = new Hono()
@@ -15,10 +15,22 @@ sessionRouter.get('/api/session/:id', async (c) => {
   return c.json(await opencodeAdapter.getSession(sessionID))
 })
 
+sessionRouter.get('/api/session/:id/children', async (c) => {
+  const sessionID = c.req.param('id')
+  return c.json(await opencodeAdapter.getSessionChildren(sessionID))
+})
+
+sessionRouter.get('/api/session/:id/diff', async (c) => {
+  const sessionID = c.req.param('id')
+  const messageID = c.req.query('messageID')
+  return c.json(await opencodeAdapter.getSessionDiff(sessionID, messageID))
+})
+
 sessionRouter.get('/api/session/:id/messages', async (c) => {
   const sessionID = c.req.param('id')
   const limit = c.req.query('limit')
-  const parsedLimit = limit ? Number.parseInt(limit, 10) : undefined
+  const parsed = limit ? Number.parseInt(limit, 10) : undefined
+  const parsedLimit = parsed !== undefined && !Number.isNaN(parsed) ? parsed : undefined
   return c.json(await opencodeAdapter.getSessionMessages(sessionID, parsedLimit))
 })
 
@@ -57,6 +69,46 @@ sessionRouter.post('/api/session/:id/fork', async (c) => {
   return c.json(session)
 })
 
+sessionRouter.post('/api/session/:id/revert', async (c) => {
+  const sessionID = c.req.param('id')
+  let body: { messageID?: string; partID?: string } = {}
+  const contentType = c.req.header('content-type') ?? ''
+  if (contentType.includes('application/json')) {
+    try { body = await c.req.json() } catch { return c.json({ error: 'Invalid JSON body' }, 400) }
+  }
+  const session = await opencodeAdapter.revertSession(sessionID, body.messageID, body.partID)
+  return c.json(session)
+})
+
+sessionRouter.post('/api/session/:id/unrevert', async (c) => {
+  const sessionID = c.req.param('id')
+  const session = await opencodeAdapter.unrevertSession(sessionID)
+  return c.json(session)
+})
+
+sessionRouter.post('/api/session/:id/summarize', async (c) => {
+  const sessionID = c.req.param('id')
+  let body: { providerID?: string; modelID?: string } = {}
+  const contentType = c.req.header('content-type') ?? ''
+  if (contentType.includes('application/json')) {
+    try { body = await c.req.json() } catch { return c.json({ error: 'Invalid JSON body' }, 400) }
+  }
+  const ok = await opencodeAdapter.summarizeSession(sessionID, body.providerID, body.modelID)
+  return c.json({ ok })
+})
+
+sessionRouter.post('/api/session/:id/share', async (c) => {
+  const sessionID = c.req.param('id')
+  const session = await opencodeAdapter.shareSession(sessionID)
+  return c.json(session)
+})
+
+sessionRouter.delete('/api/session/:id/share', async (c) => {
+  const sessionID = c.req.param('id')
+  const session = await opencodeAdapter.unshareSession(sessionID)
+  return c.json(session)
+})
+
 sessionRouter.post('/api/session/:id/abort', async (c) => {
   const sessionID = c.req.param('id')
   await opencodeAdapter.abortSession(sessionID)
@@ -66,5 +118,6 @@ sessionRouter.post('/api/session/:id/abort', async (c) => {
 sessionRouter.delete('/api/session/:id', async (c) => {
   const sessionID = c.req.param('id')
   await opencodeAdapter.deleteSession(sessionID)
+  cleanupSessionData(sessionID)
   return c.json({ ok: true })
 })
