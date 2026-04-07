@@ -6,6 +6,10 @@ type AnyEvent = { type: string; properties: Record<string, unknown> }
 
 const clients = new Set<(event: AnyEvent) => void>()
 
+// C2: Track connection state for health endpoint
+let connected = false
+export function isOpencodeConnected() { return connected }
+
 function broadcast(event: AnyEvent) {
   for (const send of clients) {
     try { send(event) } catch {}
@@ -17,17 +21,34 @@ function addClient(send: (event: AnyEvent) => void) {
   return () => clients.delete(send)
 }
 
+// C2: Exponential backoff with max delay cap
+const INITIAL_RETRY_MS = 1000
+const MAX_RETRY_MS = 60_000
+
 export async function startOpencodeListener(): Promise<void> {
-  try {
-    const stream = await opencodeAdapter.globalEventStream()
-    for await (const event of stream) {
-      const payload = event as AnyEvent
-      if (payload) broadcast(payload)
+  let retryMs = INITIAL_RETRY_MS
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    try {
+      const stream = await opencodeAdapter.globalEventStream()
+      connected = true
+      retryMs = INITIAL_RETRY_MS // reset on successful connection
+      console.log('[sse] connected to opencode event stream')
+
+      for await (const event of stream) {
+        const payload = event as AnyEvent
+        if (payload) broadcast(payload)
+      }
+      // Stream ended normally — reconnect
+      connected = false
+      console.warn('[sse] opencode stream ended, reconnecting...')
+    } catch (err) {
+      connected = false
+      console.error(`[sse] opencode stream error, retrying in ${retryMs / 1000}s:`, err)
+      await new Promise((r) => setTimeout(r, retryMs))
+      retryMs = Math.min(retryMs * 2, MAX_RETRY_MS)
     }
-  } catch (err) {
-    console.error('[sse] opencode stream error, retrying in 3s:', err)
-    await new Promise((r) => setTimeout(r, 3000))
-    return startOpencodeListener()
   }
 }
 

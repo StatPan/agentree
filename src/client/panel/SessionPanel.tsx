@@ -741,13 +741,16 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
               onClick={() => {
                 if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return
                 fetch(`/api/session/${sessionId}`, { method: 'DELETE' })
-                  .then(() => setSelectedSession(null))
+                  .then(() => {
+                    setSelectedSession(null)
+                    return refreshTree()
+                  })
                   .catch((err) => setError(err instanceof Error ? err.message : String(err)))
               }}
               title="Delete session"
-              style={{ background: 'none', border: 'none', color: '#4b5563', fontSize: 16, cursor: 'pointer', padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}
+              style={{ background: 'none', border: 'none', color: '#4b5563', fontSize: 14, cursor: 'pointer', padding: '0 4px', lineHeight: 1, flexShrink: 0 }}
             >
-              ␡
+              ✕
             </button>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>

@@ -22,23 +22,40 @@ export function AgentNode({ data, selected }: NodeProps) {
   const setSubtaskTargetSession = useAgentStore((state) => state.setSubtaskTargetSession)
   const applySessionTree = useAgentStore((state) => state.applySessionTree)
 
+  async function fetchJson(url: string, options?: RequestInit) {
+    const res = await fetch(url, options)
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+    return res.json()
+  }
+
   async function refreshTree() {
-    const response = await fetch('/api/tree')
-    const tree = await response.json()
+    const tree = await fetchJson('/api/tree')
     applySessionTree(tree)
   }
 
   async function forkSession(event: React.MouseEvent<HTMLButtonElement>) {
     event.stopPropagation()
-    const response = await fetch(`/api/session/${d.sessionId}/fork`, {
+    // Lock canvas label before opencode renames original session
+    await fetch(`/api/canvas/${d.sessionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: d.label }),
+    })
+    const forked = await fetchJson(`/api/session/${d.sessionId}/fork`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const forked = await response.json()
-    if (!response.ok) throw new Error('Failed to fork session')
     await refreshTree()
     if (forked?.id) setSelectedSession(forked.id)
+  }
+
+  async function deleteSession(event: React.MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation()
+    if (!window.confirm(`Delete "${d.label}"?`)) return
+    await fetch(`/api/session/${d.sessionId}`, { method: 'DELETE' })
+    await refreshTree()
+    setSelectedSession(null)
   }
 
   return (
@@ -89,21 +106,16 @@ export function AgentNode({ data, selected }: NodeProps) {
             + Subtask
           </button>
           <button
-            onClick={(event) => {
-              void forkSession(event)
-            }}
-            style={{
-              border: '1px solid #0f766e',
-              background: '#115e59',
-              color: '#ecfeff',
-              borderRadius: 999,
-              padding: '2px 7px',
-              fontSize: 10,
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
+            onClick={(event) => { void forkSession(event) }}
+            style={{ border: '1px solid #0f766e', background: '#115e59', color: '#ecfeff', borderRadius: 999, padding: '2px 7px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}
           >
             Fork
+          </button>
+          <button
+            onClick={(event) => { void deleteSession(event) }}
+            style={{ border: '1px solid #7f1d1d', background: '#450a0a', color: '#fca5a5', borderRadius: 999, padding: '2px 7px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}
+          >
+            Del
           </button>
         </div>
       )}

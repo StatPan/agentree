@@ -43,7 +43,14 @@ sessionRouter.post('/api/session/:id/subtask', async (c) => {
 
 sessionRouter.post('/api/session/:id/fork', async (c) => {
   const sessionID = c.req.param('id')
-  const body: { messageID?: string } = await c.req.json<{ messageID?: string }>().catch(() => ({}))
+  // C4: Parse body safely — fork can legitimately have no body (optional messageID)
+  let body: { messageID?: string } = {}
+  const contentType = c.req.header('content-type') ?? ''
+  if (contentType.includes('application/json')) {
+    try { body = await c.req.json<{ messageID?: string }>() } catch {
+      return c.json({ error: 'Invalid JSON body' }, 400)
+    }
+  }
   const session = await opencodeAdapter.forkSession({ sessionID, messageID: body.messageID })
   saveSessionFork(session.id, sessionID)
   saveSessionRelation(sessionID, session.id, 'fork')
