@@ -34,9 +34,7 @@ Each node on the canvas = one opencode session. The canvas just visualizes what 
 
 ## Status
 
-🌱 Early development. PRD in [`docs/PRD.md`](docs/PRD.md).
-
-OpenCode integration notes and supervision source map live in [`docs/OPENCODE_INTEGRATION.md`](docs/OPENCODE_INTEGRATION.md).
+Early development.
 
 ## Run opencode with Docker
 
