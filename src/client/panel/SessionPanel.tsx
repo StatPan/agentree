@@ -31,7 +31,8 @@ type MessagePart =
   | { id: string; type: 'agent'; name: string }
   | { id: string; type: 'retry'; attempt: number; error: unknown }
   | { id: string; type: 'compaction'; auto: boolean }
-  | { id: string; type: string }
+  | { id: string; type: 'step-start' }
+  | { id: string; type: 'snapshot' }
 
 type SessionMessage = {
   info: {

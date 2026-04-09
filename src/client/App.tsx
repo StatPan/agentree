@@ -54,9 +54,13 @@ export default function App() {
   const applySessionTree = useAgentStore((s) => s.applySessionTree)
 
   async function refreshTree() {
-    const response = await fetch('/api/tree')
-    const data = await response.json()
-    applySessionTree(data)
+    try {
+      const response = await fetch('/api/tree')
+      const data = await response.json()
+      applySessionTree(data)
+    } catch (err) {
+      console.error('[App] refreshTree failed', err)
+    }
   }
 
   useEffect(() => {

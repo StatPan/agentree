@@ -22,8 +22,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Type check
+      - name: Type check (server)
         run: pnpm exec tsc --noEmit
+
+      - name: Type check (client)
+        run: pnpm exec tsc --noEmit -p tsconfig.client.json
 
       - name: Test
         run: pnpm test

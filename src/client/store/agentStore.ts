@@ -15,6 +15,7 @@ export const STATUS_COLORS: Record<NodeStatus, string> = {
 export type ViewMode = 'recent' | 'all'
 export type RelationType = 'fork' | 'linked' | 'detached'
 export type AppView = 'home' | 'canvas'
+export type ActiveProjectKey = string | null
 
 export type Project = {
   id: string
@@ -50,6 +51,11 @@ export type AgentNodeData = {
   groupKey: string
   lastActivity: string
   childPendingCount: number
+  hasParent: boolean
+  detached: boolean
+  taskCount: number
+  pendingTaskCount: number
+  incomingTask: TaskInvocation | undefined
   [key: string]: unknown
 }
 
@@ -75,10 +81,11 @@ type SessionInfo = {
     x?: number
     y?: number
     pinned?: boolean
+    detached?: boolean
   } | null
 }
 
-type TaskInvocation = {
+export type TaskInvocation = {
   id: number
   parent_session_id: string
   message_id: string | null
@@ -406,9 +413,13 @@ function buildGraph(
   taskInvocations: TaskInvocation[] = [],
 ): Pick<AgentStore, 'nodes' | 'edges' | 'groupHeaders'> {
   const taskCountByParent = new Map<string, number>()
+  const pendingTaskCountByParent = new Map<string, number>()
   const incomingTaskByChild = new Map<string, TaskInvocation>()
   for (const t of taskInvocations) {
     taskCountByParent.set(t.parent_session_id, (taskCountByParent.get(t.parent_session_id) ?? 0) + 1)
+    if (!t.child_session_id) {
+      pendingTaskCountByParent.set(t.parent_session_id, (pendingTaskCountByParent.get(t.parent_session_id) ?? 0) + 1)
+    }
     if (t.child_session_id) incomingTaskByChild.set(t.child_session_id, t)
   }
   const rawNodes: Node<AgentNodeData>[] = sessions.map((session) => {
@@ -433,7 +444,10 @@ function buildGraph(
         groupKey: projectGroupFromDirectory(session.directory),
         lastActivity: lastActivityBySession[session.id] ?? '',
         childPendingCount,
-        taskCount: taskCountByParent.get(session.id),
+        hasParent: Boolean(session.parentID),
+        detached: Boolean(session.canvas?.detached),
+        taskCount: taskCountByParent.get(session.id) ?? 0,
+        pendingTaskCount: pendingTaskCountByParent.get(session.id) ?? 0,
         incomingTask: incomingTaskByChild.get(session.id),
       },
     }
