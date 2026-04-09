@@ -8,6 +8,7 @@ function resetStore() {
     statusBySession: {},
     lastActivityBySession: {},
     relations: [],
+    taskInvocations: [],
     nodes: [],
     edges: [],
     groupHeaders: [],
@@ -92,6 +93,33 @@ describe('buildGraph — relation edges on canvas', () => {
   })
 })
 
+describe('buildGraph — task lineage', () => {
+  beforeEach(resetStore)
+
+  it('adds task counts to parent node and incoming task to child node', () => {
+    useAgentStore.getState().applySessionTree({
+      sessions: [session('root'), session('child', 'root')],
+      taskInvocations: [{
+        id: 1,
+        parent_session_id: 'root',
+        message_id: 'msg-1',
+        part_id: 'part-1',
+        child_session_id: 'child',
+        agent: 'explore',
+        description: 'Explore code',
+        prompt_preview: 'Explore code',
+        created_at: '',
+        updated_at: '',
+      }],
+    })
+
+    const st = useAgentStore.getState()
+    expect(st.nodes.find((node) => node.id === 'root')?.data.taskCount).toBe(1)
+    expect(st.nodes.find((node) => node.id === 'child')?.data.incomingTask?.agent).toBe('explore')
+    expect(st.edges.find((edge) => edge.target === 'child')?.data).toEqual({ kind: 'task', label: 'explore' })
+  })
+})
+
 describe('applyEvent — session.deleted cleanup', () => {
   beforeEach(resetStore)
 
@@ -149,5 +177,19 @@ describe('applyEvent — command.executed', () => {
   it('updates lastActivityBySession to trigger panel refresh', () => {
     useAgentStore.getState().applyEvent({ type: 'command.executed', properties: { sessionID: 'a' } })
     expect(useAgentStore.getState().lastActivityBySession['a']).toBeTruthy()
+  })
+})
+
+describe('applyEvent — todo.updated', () => {
+  beforeEach(resetStore)
+
+  it('normalizes opencode todo content into description', () => {
+    useAgentStore.getState().applyEvent({
+      type: 'todo.updated',
+      properties: { sessionID: 'a', todos: [{ content: 'Investigate bug', status: 'in_progress', priority: 'high' }] },
+    })
+    expect(useAgentStore.getState().todosBySession.a).toEqual([
+      { id: 'a-0', description: 'Investigate bug', status: 'in_progress' },
+    ])
   })
 })

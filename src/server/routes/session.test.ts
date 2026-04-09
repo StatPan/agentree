@@ -24,11 +24,13 @@ vi.mock('../opencode/index.js', () => ({
 vi.mock('../db/index.js', () => ({
   saveSessionFork: vi.fn(),
   saveSessionRelation: vi.fn(),
+  getTaskInvocationsForSession: vi.fn(),
+  upsertTaskInvocation: vi.fn(),
   cleanupSessionData: vi.fn(),
 }))
 
 import { opencodeAdapter } from '../opencode/index.js'
-import { saveSessionFork, saveSessionRelation, cleanupSessionData } from '../db/index.js'
+import { saveSessionFork, saveSessionRelation, cleanupSessionData, getTaskInvocationsForSession, upsertTaskInvocation } from '../db/index.js'
 import { sessionRouter } from './session.js'
 
 const app = new Hono()
@@ -38,6 +40,18 @@ const mockSession = { id: 'sess-1', title: 'Test', parentID: null, directory: '/
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(upsertTaskInvocation).mockReturnValue({
+    id: 1,
+    parent_session_id: 'sess-1',
+    message_id: null,
+    part_id: 'task-test',
+    child_session_id: null,
+    agent: 'explore',
+    description: 'Explore',
+    prompt_preview: 'Explore this',
+    created_at: '',
+    updated_at: '',
+  })
 })
 
 // ─── GET routes ──────────────────────────────────────────────────────────────
@@ -99,6 +113,16 @@ describe('GET /api/session/:id/messages', () => {
   })
 })
 
+describe('GET /api/session/:id/tasks', () => {
+  it('returns task invocations for the session', async () => {
+    vi.mocked(getTaskInvocationsForSession).mockReturnValue([])
+    const res = await app.request('/api/session/sess-1/tasks')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual([])
+    expect(getTaskInvocationsForSession).toHaveBeenCalledWith('sess-1')
+  })
+})
+
 // ─── POST routes ─────────────────────────────────────────────────────────────
 
 describe('POST /api/session/:id/fork', () => {
@@ -131,6 +155,41 @@ describe('POST /api/session/:id/fork', () => {
       body: '{invalid',
     })
     expect(res.status).toBe(400)
+  })
+})
+
+describe('POST /api/session/:id/subtask', () => {
+  it('creates a task invocation and sends a subtask part', async () => {
+    vi.mocked(opencodeAdapter.sendSubtask).mockResolvedValue(undefined)
+    const res = await app.request('/api/session/sess-1/subtask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'Explore this', description: 'Explore', agent: 'explore' }),
+    })
+    expect(res.status).toBe(200)
+    expect(upsertTaskInvocation).toHaveBeenCalledWith(expect.objectContaining({
+      parentSessionId: 'sess-1',
+      agent: 'explore',
+      description: 'Explore',
+      promptPreview: 'Explore this',
+    }))
+    expect(opencodeAdapter.sendSubtask).toHaveBeenCalledWith(expect.objectContaining({
+      sessionID: 'sess-1',
+      prompt: 'Explore this',
+      description: 'Explore',
+      agent: 'explore',
+      partID: expect.stringMatching(/^prt_/),
+    }))
+  })
+
+  it('rejects an empty prompt', async () => {
+    const res = await app.request('/api/session/sess-1/subtask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: '   ' }),
+    })
+    expect(res.status).toBe(400)
+    expect(opencodeAdapter.sendSubtask).not.toHaveBeenCalled()
   })
 })
 

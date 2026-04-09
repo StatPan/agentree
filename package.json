@@ -10,6 +10,7 @@
     "build": "tsc -p tsconfig.json && vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:opencode": "dotenv -e .env.opencode -- env AGENTREE_OPENCODE_INTEGRATION=1 AGENTREE_OPENCODE_LLM=1 vitest run --config vitest.opencode.config.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
   },

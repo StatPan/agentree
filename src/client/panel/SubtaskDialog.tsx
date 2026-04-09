@@ -1,9 +1,17 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 type SubtaskDialogProps = {
   sessionId: string
   onClose: () => void
   onCreated?: () => void
+}
+
+type AgentInfo = {
+  name: string
+  description?: string
+  mode: 'subagent' | 'primary' | 'all'
+  hidden?: boolean
+  native?: boolean
 }
 
 const fieldStyle = {
@@ -21,8 +29,30 @@ export function SubtaskDialog({ sessionId, onClose, onCreated }: SubtaskDialogPr
   const [prompt, setPrompt] = useState('')
   const [description, setDescription] = useState('')
   const [agent, setAgent] = useState('build')
+  const [agents, setAgents] = useState<AgentInfo[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/agents')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        if (cancelled || !Array.isArray(data)) return
+        setAgents(data)
+        const preferred = data.find((item: AgentInfo) => !item.hidden && item.mode === 'subagent')
+          ?? data.find((item: AgentInfo) => !item.hidden && item.mode === 'all')
+          ?? data.find((item: AgentInfo) => item.name === 'build')
+        if (preferred?.name) setAgent(preferred.name)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  const sortedAgents = useMemo(() => [...agents].sort((left, right) => {
+    const rank = (agentInfo: AgentInfo) => agentInfo.mode === 'subagent' ? 0 : agentInfo.mode === 'all' ? 1 : 2
+    return rank(left) - rank(right) || left.name.localeCompare(right.name)
+  }), [agents])
 
   async function submit() {
     const trimmedPrompt = prompt.trim()
@@ -81,7 +111,22 @@ export function SubtaskDialog({ sessionId, onClose, onCreated }: SubtaskDialogPr
         <div style={{ color: '#94a3b8', fontSize: 12, marginBottom: 14, fontFamily: 'ui-monospace, monospace' }}>{sessionId}</div>
         {error && <div style={{ color: '#fca5a5', fontSize: 12, marginBottom: 10 }}>{error}</div>}
         <div style={{ display: 'grid', gap: 10 }}>
-          <input value={agent} onChange={(e) => setAgent(e.target.value)} placeholder="Agent name" style={fieldStyle} />
+          {sortedAgents.length > 0 ? (
+            <select value={agent} onChange={(e) => setAgent(e.target.value)} style={fieldStyle}>
+              {sortedAgents.map((item) => (
+                <option key={item.name} value={item.name}>
+                  {item.name} · {item.mode}{item.hidden ? ' · hidden' : ''}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input value={agent} onChange={(e) => setAgent(e.target.value)} placeholder="Agent name" style={fieldStyle} />
+          )}
+          {sortedAgents.find((item) => item.name === agent)?.description && (
+            <div style={{ color: '#94a3b8', fontSize: 11, lineHeight: 1.4 }}>
+              {sortedAgents.find((item) => item.name === agent)?.description}
+            </div>
+          )}
           <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Short description" style={fieldStyle} />
           <textarea
             value={prompt}

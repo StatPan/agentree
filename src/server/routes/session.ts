@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
-import { saveSessionFork, saveSessionRelation, cleanupSessionData } from '../db/index.js'
+import { randomUUID } from 'crypto'
+import { saveSessionFork, saveSessionRelation, cleanupSessionData, getTaskInvocationsForSession, upsertTaskInvocation } from '../db/index.js'
 import { opencodeAdapter } from '../opencode/index.js'
 
 export const sessionRouter = new Hono()
@@ -34,6 +35,11 @@ sessionRouter.get('/api/session/:id/messages', async (c) => {
   return c.json(await opencodeAdapter.getSessionMessages(sessionID, parsedLimit))
 })
 
+sessionRouter.get('/api/session/:id/tasks', async (c) => {
+  const sessionID = c.req.param('id')
+  return c.json(getTaskInvocationsForSession(sessionID))
+})
+
 sessionRouter.post('/api/session/:id/prompt', async (c) => {
   const sessionID = c.req.param('id')
   const body = await c.req.json<{ text: string }>()
@@ -49,8 +55,20 @@ sessionRouter.post('/api/session/:id/subtask', async (c) => {
     agent?: string
     model?: { providerID: string; modelID: string }
   }>()
-  await opencodeAdapter.sendSubtask({ sessionID, ...body })
-  return c.json({ ok: true })
+  const prompt = body.prompt?.trim()
+  if (!prompt) return c.json({ error: 'prompt is required' }, 400)
+  const agent = body.agent?.trim() || 'build'
+  const description = body.description?.trim() || prompt.slice(0, 80)
+  const partID = `prt_${randomUUID()}`
+  const task = upsertTaskInvocation({
+    parentSessionId: sessionID,
+    partId: partID,
+    agent,
+    description,
+    promptPreview: prompt.slice(0, 500),
+  })
+  await opencodeAdapter.sendSubtask({ sessionID, partID, prompt, description, agent, model: body.model })
+  return c.json({ ok: true, task })
 })
 
 sessionRouter.post('/api/session/:id/fork', async (c) => {

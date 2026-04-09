@@ -1,5 +1,6 @@
 import type { Context } from 'hono'
 import { streamSSE } from 'hono/streaming'
+import { linkTaskInvocationToChild, upsertTaskInvocation } from '../db/index.js'
 import { opencodeAdapter } from '../opencode/index.js'
 
 type AnyEvent = { type: string; properties: Record<string, unknown> }
@@ -13,6 +14,36 @@ export function isOpencodeConnected() { return connected }
 function broadcast(event: AnyEvent) {
   for (const send of clients) {
     try { send(event) } catch {}
+  }
+}
+
+export function trackTaskLineage(event: AnyEvent) {
+  if (event.type === 'message.part.updated') {
+    const part = event.properties.part as {
+      id?: string
+      sessionID?: string
+      messageID?: string
+      type?: string
+      prompt?: string
+      description?: string
+      agent?: string
+    } | undefined
+    const parentSessionId = typeof event.properties.sessionID === 'string' ? event.properties.sessionID : part?.sessionID
+    if (!parentSessionId || part?.type !== 'subtask') return
+    upsertTaskInvocation({
+      parentSessionId,
+      messageId: typeof event.properties.messageID === 'string' ? event.properties.messageID : part.messageID,
+      partId: part.id ?? null,
+      agent: part.agent ?? 'unknown',
+      description: part.description ?? part.prompt?.slice(0, 80) ?? 'Subtask',
+      promptPreview: part.prompt?.slice(0, 500) ?? '',
+    })
+    return
+  }
+
+  if (event.type === 'session.created') {
+    const info = event.properties.info as { id?: string; parentID?: string | null } | undefined
+    if (info?.id && info.parentID) linkTaskInvocationToChild(info.parentID, info.id)
   }
 }
 
@@ -38,7 +69,10 @@ export async function startOpencodeListener(): Promise<void> {
 
       for await (const event of stream) {
         const payload = event as AnyEvent
-        if (payload) broadcast(payload)
+        if (payload) {
+          trackTaskLineage(payload)
+          broadcast(payload)
+        }
       }
       // Stream ended normally — reconnect
       connected = false

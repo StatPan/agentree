@@ -67,9 +67,10 @@ export function PeerReviewSection({ sessionId }: { sessionId: string }) {
     let summary: string | null = null
     if (summaryOk && messages.length > 0) {
       const last = messages[messages.length - 1]
-      const parts = (last as { parts?: Array<{ type: string; text?: string }> }).parts
-      if (last && (last as { role?: string }).role === 'assistant' && parts) {
-        const textPart = parts.find((p: { type: string; text?: string }) => p.type === 'text')
+      const isMsg = (x: unknown): x is { role: string; parts: Array<{ type: string; text?: string }> } =>
+        typeof x === 'object' && x !== null && 'role' in x && 'parts' in x && Array.isArray((x as { parts: unknown }).parts)
+      if (isMsg(last) && last.role === 'assistant') {
+        const textPart = last.parts.find((p) => p.type === 'text')
         if (textPart?.text) summary = textPart.text
       }
     }

@@ -3,8 +3,26 @@ import dagre from '@dagrejs/dagre'
 import { create } from 'zustand'
 
 export type NodeStatus = 'running' | 'needs-permission' | 'needs-answer' | 'idle' | 'done' | 'failed'
+
+export const STATUS_COLORS: Record<NodeStatus, string> = {
+  running: '#22c55e',
+  'needs-permission': '#eab308',
+  'needs-answer': '#f97316',
+  idle: '#60a5fa',
+  done: '#6b7280',
+  failed: '#ef4444',
+}
 export type ViewMode = 'recent' | 'all'
 export type RelationType = 'fork' | 'linked' | 'detached'
+export type AppView = 'home' | 'canvas'
+export type ActiveProjectKey = string | null
+
+export type Project = {
+  id: string
+  name: string
+  directoryKey: string
+  createdAt: string
+}
 
 export type SessionRelation = {
   id: number
@@ -33,6 +51,11 @@ export type AgentNodeData = {
   groupKey: string
   lastActivity: string
   childPendingCount: number
+  hasParent: boolean
+  detached: boolean
+  taskCount: number
+  pendingTaskCount: number
+  incomingTask: TaskInvocation | undefined
   [key: string]: unknown
 }
 
@@ -50,6 +73,7 @@ type SessionInfo = {
   title: string
   parentID: string | null
   directory: string
+  projectId?: string | null
   time: { created: number; updated: number }
   forkedFromSessionID?: string | null
   canvas?: {
@@ -57,7 +81,21 @@ type SessionInfo = {
     x?: number
     y?: number
     pinned?: boolean
+    detached?: boolean
   } | null
+}
+
+export type TaskInvocation = {
+  id: number
+  parent_session_id: string
+  message_id: string | null
+  part_id: string | null
+  child_session_id: string | null
+  agent: string
+  description: string
+  prompt_preview: string
+  created_at: string
+  updated_at: string
 }
 
 type TreePayload = {
@@ -65,6 +103,8 @@ type TreePayload = {
   statusBySession?: Record<string, NodeStatus>
   compat?: CompatInfo | null
   relations?: SessionRelation[]
+  taskInvocations?: TaskInvocation[]
+  projects?: Array<{ id: string; name: string; directory_key: string; created_at: string }>
 }
 
 type AgentEvent = {
@@ -370,7 +410,18 @@ function buildGraph(
   relations: SessionRelation[] = [],
   pendingPermissions: Record<string, unknown> = {},
   pendingQuestions: Record<string, unknown> = {},
+  taskInvocations: TaskInvocation[] = [],
 ): Pick<AgentStore, 'nodes' | 'edges' | 'groupHeaders'> {
+  const taskCountByParent = new Map<string, number>()
+  const pendingTaskCountByParent = new Map<string, number>()
+  const incomingTaskByChild = new Map<string, TaskInvocation>()
+  for (const t of taskInvocations) {
+    taskCountByParent.set(t.parent_session_id, (taskCountByParent.get(t.parent_session_id) ?? 0) + 1)
+    if (!t.child_session_id) {
+      pendingTaskCountByParent.set(t.parent_session_id, (pendingTaskCountByParent.get(t.parent_session_id) ?? 0) + 1)
+    }
+    if (t.child_session_id) incomingTaskByChild.set(t.child_session_id, t)
+  }
   const rawNodes: Node<AgentNodeData>[] = sessions.map((session) => {
     const childIds = sessions.filter((s) => s.parentID === session.id).map((s) => s.id)
     const childPendingCount = childIds.filter((id) => pendingPermissions[id] || pendingQuestions[id]).length
@@ -393,6 +444,11 @@ function buildGraph(
         groupKey: projectGroupFromDirectory(session.directory),
         lastActivity: lastActivityBySession[session.id] ?? '',
         childPendingCount,
+        hasParent: Boolean(session.parentID),
+        detached: Boolean(session.canvas?.detached),
+        taskCount: taskCountByParent.get(session.id) ?? 0,
+        pendingTaskCount: pendingTaskCountByParent.get(session.id) ?? 0,
+        incomingTask: incomingTaskByChild.get(session.id),
       },
     }
   })
@@ -405,11 +461,13 @@ function buildGraph(
     .filter((session) => session.parentID)
     .map((session) => {
       const status = statusBySession[session.id] ?? 'idle'
+      const incoming = incomingTaskByChild.get(session.id)
       return {
         id: `${session.parentID}-${session.id}`,
         source: session.parentID!,
         target: session.id,
         type: 'agentEdge',
+        ...(incoming ? { data: { kind: 'task', label: incoming.agent } } : {}),
         ...edgeStyleForSession(session, status, relationTypeBySessionId),
       }
     })
@@ -455,13 +513,21 @@ type AgentStore = {
   subtaskTargetSessionId: string | null
   pendingPermissions: Record<string, unknown>
   pendingQuestions: Record<string, unknown>
+  taskInvocations: TaskInvocation[]
   todosBySession: Record<string, Array<{ id: string; description: string; status: string }>>
   diffBySession: Record<string, { summary?: string; changedFiles?: string[] }>
+  projects: Project[]
+  appView: AppView
+  activeProjectKey: string | null
+  pendingScrollToSessionId: string | null
   addRelation: (fromSessionId: string, toSessionId: string, relationType: string) => Promise<void>
   removeRelation: (id: number) => Promise<void>
   setSelectedSession: (id: string | null) => void
   setSubtaskTargetSession: (id: string | null) => void
   setViewMode: (mode: ViewMode) => void
+  setAppView: (view: AppView) => void
+  setActiveProjectKey: (key: string | null) => void
+  setPendingScrollToSessionId: (id: string | null) => void
   onNodesChange: (changes: NodeChange[]) => void
   pinNode: (sessionId: string, position: { x: number; y: number }) => void
   applySessionTree: (payload: TreePayload) => void
@@ -482,8 +548,13 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   subtaskTargetSessionId: null,
   pendingPermissions: {},
   pendingQuestions: {},
+  taskInvocations: [],
   todosBySession: {},
   diffBySession: {},
+  projects: [],
+  appView: 'home',
+  activeProjectKey: null,
+  pendingScrollToSessionId: null,
 
   addRelation: async (fromSessionId, toSessionId, relationType) => {
     const res = await fetch('/api/relation', {
@@ -507,11 +578,14 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
   setSelectedSession: (id) => set({ selectedSessionId: id }),
   setSubtaskTargetSession: (id) => set({ subtaskTargetSessionId: id }),
+  setAppView: (view) => set({ appView: view }),
+  setActiveProjectKey: (key) => set({ activeProjectKey: key }),
+  setPendingScrollToSessionId: (id) => set({ pendingScrollToSessionId: id }),
 
   setViewMode: (mode) =>
     set((state) => ({
       viewMode: mode,
-      ...buildGraph(state.sessions, mode, state.statusBySession, state.lastActivityBySession, state.relations, state.pendingPermissions, state.pendingQuestions),
+      ...buildGraph(state.sessions, mode, state.statusBySession, state.lastActivityBySession, state.relations, state.pendingPermissions, state.pendingQuestions, state.taskInvocations),
     })),
 
   onNodesChange: (changes) =>
@@ -537,17 +611,21 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
       return {
         sessions,
-        ...buildGraph(sessions, state.viewMode, state.statusBySession, state.lastActivityBySession, state.relations, state.pendingPermissions, state.pendingQuestions),
+        ...buildGraph(sessions, state.viewMode, state.statusBySession, state.lastActivityBySession, state.relations, state.pendingPermissions, state.pendingQuestions, state.taskInvocations),
       }
     }),
 
-  applySessionTree: ({ sessions, statusBySession = {}, compat = null, relations = [] }) =>
+  applySessionTree: ({ sessions, statusBySession = {}, compat = null, relations = [], taskInvocations = [], projects }) =>
     set((state) => ({
       sessions,
       statusBySession: { ...state.statusBySession, ...statusBySession },
       compat,
       relations,
-      ...buildGraph(sessions, state.viewMode, { ...state.statusBySession, ...statusBySession }, state.lastActivityBySession, relations, state.pendingPermissions, state.pendingQuestions),
+      taskInvocations,
+      projects: projects
+        ? projects.map((p) => ({ id: p.id, name: p.name, directoryKey: p.directory_key, createdAt: p.created_at }))
+        : state.projects,
+      ...buildGraph(sessions, state.viewMode, { ...state.statusBySession, ...statusBySession }, state.lastActivityBySession, relations, state.pendingPermissions, state.pendingQuestions, taskInvocations),
     })),
 
   applyEvent: (event) => {
@@ -609,7 +687,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
             pendingPermissions,
             pendingQuestions,
             lastActivityBySession,
-            ...buildGraph(state.sessions, state.viewMode, statusBySession, lastActivityBySession, state.relations, pendingPermissions, pendingQuestions),
+            ...buildGraph(state.sessions, state.viewMode, statusBySession, lastActivityBySession, state.relations, pendingPermissions, pendingQuestions, state.taskInvocations),
           }
         })
         return
@@ -629,7 +707,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
             }
             return {
               lastActivityBySession,
-              ...buildGraph(state.sessions, state.viewMode, state.statusBySession, lastActivityBySession, state.relations, state.pendingPermissions, state.pendingQuestions),
+              ...buildGraph(state.sessions, state.viewMode, state.statusBySession, lastActivityBySession, state.relations, state.pendingPermissions, state.pendingQuestions, state.taskInvocations),
             }
           })
         }
@@ -649,7 +727,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
           return {
             sessions,
-            ...buildGraph(sessions, state.viewMode, state.statusBySession, state.lastActivityBySession, state.relations, state.pendingPermissions, state.pendingQuestions),
+            ...buildGraph(sessions, state.viewMode, state.statusBySession, state.lastActivityBySession, state.relations, state.pendingPermissions, state.pendingQuestions, state.taskInvocations),
           }
         })
         return
@@ -670,7 +748,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
           return {
             sessions,
-            ...buildGraph(sessions, state.viewMode, state.statusBySession, state.lastActivityBySession, state.relations, state.pendingPermissions, state.pendingQuestions),
+            ...buildGraph(sessions, state.viewMode, state.statusBySession, state.lastActivityBySession, state.relations, state.pendingPermissions, state.pendingQuestions, state.taskInvocations),
           }
         })
         return
@@ -678,10 +756,18 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
       case 'todo.updated': {
         if (!sessionId) return
+        const todos = Array.isArray(properties.todos) ? properties.todos : []
         set((state) => ({
           todosBySession: {
             ...state.todosBySession,
-            [sessionId]: (properties.todos ?? []) as Array<{ id: string; description: string; status: string }>,
+            [sessionId]: todos.map((todo, index) => {
+              const item = todo as { id?: string; content?: string; description?: string; status?: string }
+              return {
+                id: item.id ?? `${sessionId}-${index}`,
+                description: item.description ?? item.content ?? '',
+                status: item.status ?? 'pending',
+              }
+            }),
           },
         }))
         return
@@ -731,7 +817,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
             todosBySession,
             diffBySession,
             selectedSessionId: state.selectedSessionId === deletedSessionId ? null : state.selectedSessionId,
-            ...buildGraph(sessions, state.viewMode, statusBySession, lastActivityBySession, state.relations, pendingPermissions, pendingQuestions),
+            ...buildGraph(sessions, state.viewMode, statusBySession, lastActivityBySession, state.relations, pendingPermissions, pendingQuestions, state.taskInvocations),
           }
         })
       }

@@ -1,8 +1,10 @@
-import { Component, type ReactNode } from 'react'
+import { Component, useEffect, type ReactNode } from 'react'
 import { AgentCanvas } from './canvas/AgentCanvas'
 import { SessionPanel } from './panel/SessionPanel'
 import { ApprovalQueue } from './panel/ApprovalQueue'
 import { SubtaskDialog } from './panel/SubtaskDialog'
+import { SessionListSidebar } from './canvas/SessionListSidebar'
+import { HomeScreen } from './HomeScreen'
 import { useAgentStore } from './store/agentStore'
 
 // C5: Error Boundary — catches render errors and shows recovery UI
@@ -45,35 +47,49 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 }
 
 export default function App() {
+  const appView = useAgentStore((s) => s.appView)
   const selectedSessionId = useAgentStore((s) => s.selectedSessionId)
   const subtaskTargetSessionId = useAgentStore((s) => s.subtaskTargetSessionId)
   const setSubtaskTargetSession = useAgentStore((s) => s.setSubtaskTargetSession)
   const applySessionTree = useAgentStore((s) => s.applySessionTree)
 
   async function refreshTree() {
-    const response = await fetch('/api/tree')
-    const data = await response.json()
-    applySessionTree(data)
+    try {
+      const response = await fetch('/api/tree')
+      const data = await response.json()
+      applySessionTree(data)
+    } catch (err) {
+      console.error('[App] refreshTree failed', err)
+    }
   }
+
+  useEffect(() => {
+    void refreshTree()
+  }, [])
 
   return (
     <ErrorBoundary>
-      <div style={{ display: 'flex', width: '100vw', height: '100vh', background: '#0f0f0f', overflow: 'hidden' }}>
-        <div style={{ flex: 1, position: 'relative' }}>
-          <AgentCanvas />
+      {appView === 'home' ? (
+        <HomeScreen />
+      ) : (
+        <div style={{ display: 'flex', width: '100vw', height: '100vh', background: '#0f0f0f', overflow: 'hidden' }}>
+          <SessionListSidebar />
+          <div style={{ flex: 1, position: 'relative' }}>
+            <AgentCanvas />
+          </div>
+          {selectedSessionId && <SessionPanel sessionId={selectedSessionId} />}
+          <ApprovalQueue />
+          {subtaskTargetSessionId && (
+            <SubtaskDialog
+              sessionId={subtaskTargetSessionId}
+              onClose={() => setSubtaskTargetSession(null)}
+              onCreated={() => {
+                void refreshTree()
+              }}
+            />
+          )}
         </div>
-        {selectedSessionId && <SessionPanel sessionId={selectedSessionId} />}
-        <ApprovalQueue />
-        {subtaskTargetSessionId && (
-          <SubtaskDialog
-            sessionId={subtaskTargetSessionId}
-            onClose={() => setSubtaskTargetSession(null)}
-            onCreated={() => {
-              void refreshTree()
-            }}
-          />
-        )}
-      </div>
+      )}
     </ErrorBoundary>
   )
 }

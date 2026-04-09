@@ -1,21 +1,12 @@
 import { useState } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
-import type { AgentNodeData, NodeStatus } from '../store/agentStore'
-import { useAgentStore } from '../store/agentStore'
+import type { AgentNodeData } from '../store/agentStore'
+import { useAgentStore, STATUS_COLORS } from '../store/agentStore'
 import { fetchJson } from '../utils/fetchJson'
-
-const STATUS_COLOR: Record<NodeStatus, string> = {
-  running: '#22c55e',
-  'needs-permission': '#eab308',
-  'needs-answer': '#f97316',
-  idle: '#3b82f6',
-  done: '#6b7280',
-  failed: '#ef4444',
-}
 
 export function AgentNode({ data, selected }: NodeProps) {
   const d = data as AgentNodeData
-  const color = STATUS_COLOR[d.status] ?? '#6b7280'
+  const color = STATUS_COLORS[d.status] ?? '#6b7280'
   const [showActivity, setShowActivity] = useState(false)
   const [showActions, setShowActions] = useState(false)
   const isRunning = d.status === 'running'
@@ -43,6 +34,16 @@ export function AgentNode({ data, selected }: NodeProps) {
     })
     await refreshTree()
     if (forked?.id) setSelectedSession(forked.id)
+  }
+
+  async function toggleDetach(event: React.MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation()
+    await fetch(`/api/canvas/${d.sessionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ detached: !d.detached }),
+    })
+    await refreshTree()
   }
 
   async function deleteSession(event: React.MouseEvent<HTMLButtonElement>) {
@@ -106,6 +107,19 @@ export function AgentNode({ data, selected }: NodeProps) {
           >
             Fork
           </button>
+          {d.hasParent && (
+            <button
+              onClick={(event) => { void toggleDetach(event) }}
+              style={{
+                border: d.detached ? '1px solid #0f766e' : '1px solid #7c3aed',
+                background: d.detached ? '#115e59' : '#4c1d95',
+                color: d.detached ? '#ecfeff' : '#ede9fe',
+                borderRadius: 999, padding: '2px 7px', fontSize: 10, fontWeight: 700, cursor: 'pointer',
+              }}
+            >
+              {d.detached ? 'Reattach' : 'Detach'}
+            </button>
+          )}
           <button
             onClick={(event) => { void deleteSession(event) }}
             style={{ border: '1px solid #7f1d1d', background: '#450a0a', color: '#fca5a5', borderRadius: 999, padding: '2px 7px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}
@@ -157,6 +171,48 @@ export function AgentNode({ data, selected }: NodeProps) {
           title={`Forked from ${d.forkedFromSessionId}`}
         >
           FORK
+        </div>
+      )}
+      {d.taskCount > 0 && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: -8,
+            right: -8,
+            background: d.pendingTaskCount > 0 ? '#2563eb' : '#0f766e',
+            color: '#eff6ff',
+            borderRadius: 999,
+            padding: '2px 6px',
+            fontSize: 9,
+            fontWeight: 800,
+            letterSpacing: '0.04em',
+            boxShadow: '0 0 0 2px #1a1a1a',
+            zIndex: 1,
+          }}
+          title={`${d.taskCount} task${d.taskCount !== 1 ? 's' : ''}${d.pendingTaskCount > 0 ? `, ${d.pendingTaskCount} pending child` : ''}`}
+        >
+          TASK {d.taskCount}
+        </div>
+      )}
+      {d.incomingTask && !d.forkedFromSessionId && (
+        <div
+          style={{
+            position: 'absolute',
+            top: -8,
+            left: -8,
+            background: '#2563eb',
+            color: '#eff6ff',
+            borderRadius: 999,
+            padding: '2px 6px',
+            fontSize: 9,
+            fontWeight: 800,
+            letterSpacing: '0.04em',
+            boxShadow: '0 0 0 2px #1a1a1a',
+            zIndex: 1,
+          }}
+          title={`Spawned by ${d.incomingTask.agent}`}
+        >
+          TASK
         </div>
       )}
       <Handle type="target" position={Position.Bottom} style={{ background: '#555', border: 'none' }} />

@@ -31,7 +31,8 @@ type MessagePart =
   | { id: string; type: 'agent'; name: string }
   | { id: string; type: 'retry'; attempt: number; error: unknown }
   | { id: string; type: 'compaction'; auto: boolean }
-  | { id: string; type: string }
+  | { id: string; type: 'step-start' }
+  | { id: string; type: 'snapshot' }
 
 type SessionMessage = {
   info: {
@@ -52,6 +53,16 @@ type SessionMessage = {
 type SessionDetails = {
   id: string
   title?: string
+}
+
+// ─── Type guards ─────────────────────────────────────────────────────────────
+
+function asPermissionLike(v: unknown): { requestID?: string; id?: string; title?: string } {
+  return (v ?? {}) as { requestID?: string; id?: string; title?: string }
+}
+
+function asQuestionLike(v: unknown): { requestID?: string; id?: string; questions?: Array<{ id?: string; question?: string; label?: string }> } {
+  return (v ?? {}) as { requestID?: string; id?: string; questions?: Array<{ id?: string; question?: string; label?: string }> }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -224,7 +235,7 @@ function PartRow({ part }: { part: MessagePart }) {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {part.files.map((f, i) => (
-            <div key={i} style={{ display: 'flex', gap: 8, fontFamily: 'monospace', fontSize: 10 }}>
+            <div key={f.filename ?? i} style={{ display: 'flex', gap: 8, fontFamily: 'monospace', fontSize: 10 }}>
               <span style={{ color: '#9ca3af', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.filename}</span>
               {(f.additions ?? 0) > 0 && <span style={{ color: '#4ade80' }}>+{f.additions}</span>}
               {(f.deletions ?? 0) > 0 && <span style={{ color: '#f87171' }}>-{f.deletions}</span>}
@@ -572,7 +583,7 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
   useEffect(() => {
     if (!lastActivity) return
     const t = setTimeout(() => {
-      void refreshMessages()
+      void refreshMessages().catch(console.error)
     }, 600)
     return () => clearTimeout(t)
   }, [lastActivity]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -647,8 +658,8 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
 
   async function replyPermission(reply: 'once' | 'always' | 'reject') {
     if (!pendingPermission || typeof pendingPermission !== 'object') return
-    const requestID = (pendingPermission as { requestID?: string; id?: string }).requestID
-      ?? (pendingPermission as { requestID?: string; id?: string }).id
+    const requestID = asPermissionLike(pendingPermission).requestID
+      ?? asPermissionLike(pendingPermission).id
     if (!requestID) return
     const res = await fetch(`/api/permission/${requestID}/reply`, {
       method: 'POST',
@@ -660,8 +671,8 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
 
   async function submitQuestion() {
     if (!pendingQuestion || typeof pendingQuestion !== 'object') return
-    const requestID = (pendingQuestion as { requestID?: string; id?: string }).requestID
-      ?? (pendingQuestion as { requestID?: string; id?: string }).id
+    const requestID = asQuestionLike(pendingQuestion).requestID
+      ?? asQuestionLike(pendingQuestion).id
     const firstQuestion = questionItems[0]
     if (!requestID || !firstQuestion?.id || !questionAnswer.trim()) return
     const res = await fetch(`/api/question/${requestID}/reply`, {
@@ -677,15 +688,15 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
 
   async function rejectQuestion() {
     if (!pendingQuestion || typeof pendingQuestion !== 'object') return
-    const requestID = (pendingQuestion as { requestID?: string; id?: string }).requestID
-      ?? (pendingQuestion as { requestID?: string; id?: string }).id
+    const requestID = asQuestionLike(pendingQuestion).requestID
+      ?? asQuestionLike(pendingQuestion).id
     if (!requestID) return
     const res = await fetch(`/api/question/${requestID}/reject`, { method: 'POST' })
     if (!res.ok) throw new Error('Failed to reject question')
   }
 
   async function replyChildPermission(childId: string, reply: 'once' | 'always' | 'reject') {
-    const p = pendingPermissions[childId] as { requestID?: string; id?: string } | undefined
+    const p = asPermissionLike(pendingPermissions[childId])
     const requestID = p?.requestID ?? p?.id
     if (!requestID) return
     try {
@@ -701,7 +712,7 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
   }
 
   async function submitChildQuestion(childId: string) {
-    const q = pendingQuestions[childId] as { requestID?: string; id?: string; questions?: Array<{ id?: string }> } | undefined
+    const q = asQuestionLike(pendingQuestions[childId])
     const requestID = q?.requestID ?? q?.id
     const firstQ = q?.questions?.[0]
     const answer = childAnswers[childId]?.trim()
@@ -720,8 +731,8 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
   }
 
   async function rejectChildQuestion(childId: string) {
-    const q = pendingQuestions[childId] as { requestID?: string; id?: string } | undefined
-    const requestID = q?.requestID ?? q?.id
+    const q = asQuestionLike(pendingQuestions[childId])
+    const requestID = q.requestID ?? q.id
     if (!requestID) return
     try {
       const res = await fetch(`/api/question/${requestID}/reject`, { method: 'POST' })
@@ -863,7 +874,7 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
           <div style={{ padding: 16, borderBottom: '1px solid #1f2937', background: '#171717' }}>
             <div style={{ color: '#fef3c7', fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Permission Request</div>
             <div style={{ color: '#d1d5db', fontSize: 13, marginBottom: 12 }}>
-              {String((pendingPermission as { title?: string }).title ?? 'This session is waiting for permission.')}
+              {String(asPermissionLike(pendingPermission).title ?? 'This session is waiting for permission.')}
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button onClick={() => void replyPermission('once')} style={buttonStyle('#eab308', '#111')}>Allow once</button>
