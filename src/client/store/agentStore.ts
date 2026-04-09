@@ -3,8 +3,25 @@ import dagre from '@dagrejs/dagre'
 import { create } from 'zustand'
 
 export type NodeStatus = 'running' | 'needs-permission' | 'needs-answer' | 'idle' | 'done' | 'failed'
+
+export const STATUS_COLORS: Record<NodeStatus, string> = {
+  running: '#22c55e',
+  'needs-permission': '#eab308',
+  'needs-answer': '#f97316',
+  idle: '#60a5fa',
+  done: '#6b7280',
+  failed: '#ef4444',
+}
 export type ViewMode = 'recent' | 'all'
 export type RelationType = 'fork' | 'linked' | 'detached'
+export type AppView = 'home' | 'canvas'
+
+export type Project = {
+  id: string
+  name: string
+  directoryKey: string
+  createdAt: string
+}
 
 export type SessionRelation = {
   id: number
@@ -50,6 +67,7 @@ type SessionInfo = {
   title: string
   parentID: string | null
   directory: string
+  projectId?: string | null
   time: { created: number; updated: number }
   forkedFromSessionID?: string | null
   canvas?: {
@@ -79,6 +97,7 @@ type TreePayload = {
   compat?: CompatInfo | null
   relations?: SessionRelation[]
   taskInvocations?: TaskInvocation[]
+  projects?: Array<{ id: string; name: string; directory_key: string; created_at: string }>
 }
 
 type AgentEvent = {
@@ -483,11 +502,18 @@ type AgentStore = {
   taskInvocations: TaskInvocation[]
   todosBySession: Record<string, Array<{ id: string; description: string; status: string }>>
   diffBySession: Record<string, { summary?: string; changedFiles?: string[] }>
+  projects: Project[]
+  appView: AppView
+  activeProjectKey: string | null
+  pendingScrollToSessionId: string | null
   addRelation: (fromSessionId: string, toSessionId: string, relationType: string) => Promise<void>
   removeRelation: (id: number) => Promise<void>
   setSelectedSession: (id: string | null) => void
   setSubtaskTargetSession: (id: string | null) => void
   setViewMode: (mode: ViewMode) => void
+  setAppView: (view: AppView) => void
+  setActiveProjectKey: (key: string | null) => void
+  setPendingScrollToSessionId: (id: string | null) => void
   onNodesChange: (changes: NodeChange[]) => void
   pinNode: (sessionId: string, position: { x: number; y: number }) => void
   applySessionTree: (payload: TreePayload) => void
@@ -511,6 +537,10 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   taskInvocations: [],
   todosBySession: {},
   diffBySession: {},
+  projects: [],
+  appView: 'home',
+  activeProjectKey: null,
+  pendingScrollToSessionId: null,
 
   addRelation: async (fromSessionId, toSessionId, relationType) => {
     const res = await fetch('/api/relation', {
@@ -534,6 +564,9 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
   setSelectedSession: (id) => set({ selectedSessionId: id }),
   setSubtaskTargetSession: (id) => set({ subtaskTargetSessionId: id }),
+  setAppView: (view) => set({ appView: view }),
+  setActiveProjectKey: (key) => set({ activeProjectKey: key }),
+  setPendingScrollToSessionId: (id) => set({ pendingScrollToSessionId: id }),
 
   setViewMode: (mode) =>
     set((state) => ({
@@ -568,13 +601,16 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       }
     }),
 
-  applySessionTree: ({ sessions, statusBySession = {}, compat = null, relations = [], taskInvocations = [] }) =>
+  applySessionTree: ({ sessions, statusBySession = {}, compat = null, relations = [], taskInvocations = [], projects }) =>
     set((state) => ({
       sessions,
       statusBySession: { ...state.statusBySession, ...statusBySession },
       compat,
       relations,
       taskInvocations,
+      projects: projects
+        ? projects.map((p) => ({ id: p.id, name: p.name, directoryKey: p.directory_key, createdAt: p.created_at }))
+        : state.projects,
       ...buildGraph(sessions, state.viewMode, { ...state.statusBySession, ...statusBySession }, state.lastActivityBySession, relations, state.pendingPermissions, state.pendingQuestions, taskInvocations),
     })),
 
