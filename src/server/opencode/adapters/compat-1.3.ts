@@ -4,6 +4,7 @@ import { normalizeEvent, normalizeMessage, normalizeSession, normalizeStatus } f
 import type {
   AgentreeMessage,
   AgentreeSession,
+  AgentInfo,
   CreateSessionInput,
   FileDiff,
   ForkSessionInput,
@@ -30,6 +31,11 @@ function throwIfError(result: { error?: unknown }) {
 
 export const compat13Adapter: OpencodeAdapter = {
   getCompatReport,
+
+  async listAgents(): Promise<AgentInfo[]> {
+    const data = unwrapData(await opencode.app.agents(), 'Failed to load agents') as AgentInfo[]
+    return data
+  },
 
   async listSessions(): Promise<AgentreeSession[]> {
     const data = unwrapData(await opencode.session.list(), 'Failed to load sessions') as Array<{
@@ -136,6 +142,7 @@ export const compat13Adapter: OpencodeAdapter = {
     const result = await opencode.session.promptAsync({
       sessionID: input.sessionID,
       parts: [{
+        ...(input.partID ? { id: input.partID } : {}),
         type: 'subtask',
         prompt: input.prompt,
         description: input.description ?? input.prompt.slice(0, 80),

@@ -1,8 +1,21 @@
 import { Hono } from 'hono'
-import { getAllCanvasNodes, getAllSessionForks, getAllSessionRelations } from '../db/index.js'
+import { getAllCanvasNodes, getAllProjects, getAllSessionForks, getAllSessionRelations, getAllTaskInvocations, findOrCreateProject, setCanvasNodeProject } from '../db/index.js'
 import { opencodeAdapter } from '../opencode/index.js'
 
 export const treeRouter = new Hono()
+
+function projectGroupFromDirectory(directory: string): string {
+  const marker = '/workspace/'
+  const index = directory.indexOf(marker)
+  const normalized = index >= 0 ? directory.slice(index + marker.length) : directory.replace(/^\/+/, '')
+  const parts = normalized.split('/').filter(Boolean)
+  if (parts.length === 0) return 'workspace'
+  const bucketPrefixes = new Set(['apps', 'research', 'pypi_lib', 'libs', 'infra', 'skills', 'mcps', 'anal-repo'])
+  if (parts.length >= 2 && bucketPrefixes.has(parts[0])) {
+    return `${parts[0]}/${parts[1]}`
+  }
+  return parts[0]
+}
 
 treeRouter.get('/api/tree', async (c) => {
   const [sessionsResult, statusResult, compatResult] = await Promise.allSettled([
@@ -18,6 +31,17 @@ treeRouter.get('/api/tree', async (c) => {
   const sessions = sessionsResult.value
   const statusBySession = statusResult.status === 'fulfilled' ? statusResult.value : {}
   const compat = compatResult.status === 'fulfilled' ? compatResult.value : null
+
+  // Auto-create projects for each unique directory key and assign sessions
+  const projectByDirectoryKey = new Map<string, { id: string; name: string; directory_key: string; created_at: string }>()
+  for (const session of sessions) {
+    const dirKey = projectGroupFromDirectory(session.directory)
+    if (!projectByDirectoryKey.has(dirKey)) {
+      const proj = findOrCreateProject(dirKey)
+      projectByDirectoryKey.set(dirKey, proj)
+    }
+  }
+
   const canvasBySession = new Map(
     getAllCanvasNodes().map((node) => [
       node.session_id,
@@ -26,22 +50,47 @@ treeRouter.get('/api/tree', async (c) => {
         x: node.canvas_x,
         y: node.canvas_y,
         pinned: Boolean(node.pinned),
+        detached: Boolean(node.detached),
+        projectId: node.project_id ?? null,
       },
     ]),
   )
+
+  // Ensure each session has a project_id set in canvas_node
+  for (const session of sessions) {
+    const dirKey = projectGroupFromDirectory(session.directory)
+    const proj = projectByDirectoryKey.get(dirKey)
+    if (!proj) continue
+    const canvas = canvasBySession.get(session.id)
+    if (!canvas?.projectId) {
+      setCanvasNodeProject(session.id, proj.id)
+      if (canvas) {
+        canvas.projectId = proj.id
+      } else {
+        canvasBySession.set(session.id, { label: null, x: 0, y: 0, pinned: false, detached: false, projectId: proj.id })
+      }
+    }
+  }
+
   const forksBySession = new Map(
     getAllSessionForks().map((fork) => [fork.session_id, fork.forked_from_session_id]),
   )
   const relations = getAllSessionRelations()
+  const taskInvocations = getAllTaskInvocations()
+  const projects = getAllProjects()
+
   return c.json({
     sessions: sessions.map((session) => ({
       ...session,
       title: canvasBySession.get(session.id)?.label ?? session.title,
       canvas: canvasBySession.get(session.id) ?? null,
       forkedFromSessionID: forksBySession.get(session.id) ?? null,
+      projectId: canvasBySession.get(session.id)?.projectId ?? null,
     })),
     statusBySession,
     compat,
     relations,
+    taskInvocations,
+    projects,
   })
 })

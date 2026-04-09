@@ -16,6 +16,7 @@ import { useAgentStore } from '../store/agentStore'
 import { AgentNode } from './AgentNode'
 import { AgentEdge } from './AgentEdge'
 import { GroupHeaderNode } from './GroupHeaderNode'
+import { ProjectTabBar } from './ProjectTabBar'
 
 type ConnRelationType = 'linked' | 'detached'
 
@@ -141,10 +142,17 @@ export function AgentCanvas() {
   const edges = useAgentStore((s) => s.edges)
   const groupHeaders = useAgentStore((s) => s.groupHeaders)
   const compat = useAgentStore((s) => s.compat)
+  const sessions = useAgentStore((s) => s.sessions)
+  const projects = useAgentStore((s) => s.projects)
+  const activeProjectKey = useAgentStore((s) => s.activeProjectKey)
+  const pendingScrollToSessionId = useAgentStore((s) => s.pendingScrollToSessionId)
   const applySessionTree = useAgentStore((s) => s.applySessionTree)
   const applyEvent = useAgentStore((s) => s.applyEvent)
   const setSelectedSession = useAgentStore((s) => s.setSelectedSession)
   const setViewMode = useAgentStore((s) => s.setViewMode)
+  const setActiveProjectKey = useAgentStore((s) => s.setActiveProjectKey)
+  const setAppView = useAgentStore((s) => s.setAppView)
+  const setPendingScrollToSessionId = useAgentStore((s) => s.setPendingScrollToSessionId)
   const onNodesChange = useAgentStore((s) => s.onNodesChange)
   const pinNode = useAgentStore((s) => s.pinNode)
   const addRelation = useAgentStore((s) => s.addRelation)
@@ -158,6 +166,8 @@ export function AgentCanvas() {
     setPendingConn({ source: connection.source, target: connection.target })
   }, [])
   const previousViewMode = useRef(viewMode)
+  const previousActiveKey = useRef(activeProjectKey)
+  const hasTabBar = true // always show project header bar
   const reactFlowRef = useRef<ReactFlowInstance<Node> | null>(null)
 
   async function reloadTree() {
@@ -203,7 +213,13 @@ export function AgentCanvas() {
       if (cancelled) return
       es = new EventSource('/api/events')
       es.onmessage = (e) => {
-        try { applyEvent(JSON.parse(e.data)) } catch (err) { console.warn('[sse] failed to parse event:', err) }
+        try {
+          const event = JSON.parse(e.data)
+          applyEvent(event)
+          if (event.type === 'session.created' || event.type === 'message.part.updated') {
+            reloadTree().catch(console.error)
+          }
+        } catch (err) { console.warn('[sse] failed to parse event:', err) }
       }
       es.onerror = () => {
         console.warn('[sse] connection lost, reconnecting in 3s...')
@@ -224,7 +240,9 @@ export function AgentCanvas() {
   useEffect(() => {
     if (nodes.length === 0 || !reactFlowRef.current) return
 
-    const shouldFrame = !hasFramedInitialView.current || previousViewMode.current !== viewMode
+    const shouldFrame = !hasFramedInitialView.current
+      || previousViewMode.current !== viewMode
+      || previousActiveKey.current !== activeProjectKey
     if (!shouldFrame) return
 
     reactFlowRef.current.fitView({
@@ -236,10 +254,39 @@ export function AgentCanvas() {
     })
     hasFramedInitialView.current = true
     previousViewMode.current = viewMode
-  }, [nodes, viewMode])
+    previousActiveKey.current = activeProjectKey
+  }, [nodes, viewMode, activeProjectKey])
+
+  useEffect(() => {
+    if (!pendingScrollToSessionId || !reactFlowRef.current) return
+    const node = nodes.find((n) => n.id === pendingScrollToSessionId)
+    if (!node) return
+    reactFlowRef.current.setCenter(
+      node.position.x + 100,
+      node.position.y + 30,
+      { zoom: 1.0, duration: 400 },
+    )
+    setPendingScrollToSessionId(null)
+  }, [pendingScrollToSessionId, nodes])
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+      <ProjectTabBar
+        projects={projects}
+        activeProjectKey={activeProjectKey}
+        totalSessionCount={sessions.length}
+        onBack={() => setAppView('home')}
+        onSelectAll={() => setActiveProjectKey(null)}
+      />
+      {nodes.length === 0 && sessions.length > 0 && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 5,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          pointerEvents: 'none',
+        }}>
+          <span style={{ color: '#4b5563', fontSize: 13 }}>No sessions in this project</span>
+        </div>
+      )}
       {treeError && (
         <div style={{
           position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 20,
@@ -255,7 +302,7 @@ export function AgentCanvas() {
       <div
         style={{
           position: 'absolute',
-          top: 16,
+          top: hasTabBar ? 52 : 16,
           left: 16,
           zIndex: 10,
           display: 'flex',

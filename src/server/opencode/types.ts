@@ -1,4 +1,4 @@
-export type NodeStatus = 'running' | 'needs-permission' | 'needs-answer' | 'idle' | 'done' | 'failed'
+export type NodeStatus = 'running' | 'needs-permission' | 'needs-answer' | 'idle' | 'failed'
 
 export type AgentreeSession = {
   id: string
@@ -71,6 +71,7 @@ export type ForkSessionInput = {
 
 export type SubtaskInput = {
   sessionID: string
+  partID?: string
   prompt: string
   description?: string
   agent?: string
@@ -97,8 +98,17 @@ export type PermissionRule = {
   action: 'allow' | 'deny' | 'ask'
 }
 
+export type AgentInfo = {
+  name: string
+  description?: string
+  mode: 'subagent' | 'primary' | 'all'
+  hidden?: boolean
+  native?: boolean
+}
+
 export interface OpencodeAdapter {
   getCompatReport(): Promise<OpencodeCompatReport>
+  listAgents(): Promise<AgentInfo[]>
   listSessions(): Promise<AgentreeSession[]>
   listStatuses(): Promise<Record<string, NodeStatus>>
   getSession(sessionID: string): Promise<AgentreeSession>

@@ -6,3 +6,7 @@ export const systemRouter = new Hono()
 systemRouter.get('/api/system/compat', async (c) => {
   return c.json(await opencodeAdapter.getCompatReport())
 })
+
+systemRouter.get('/api/agents', async (c) => {
+  return c.json(await opencodeAdapter.listAgents())
+})
