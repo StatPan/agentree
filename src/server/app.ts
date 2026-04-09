@@ -1,5 +1,8 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { serveStatic } from '@hono/node-server/serve-static'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { treeRouter } from './routes/tree.js'
 import { sessionRouter } from './routes/session.js'
 import { canvasRouter } from './routes/canvas.js'
@@ -9,7 +12,11 @@ import { relationRouter } from './routes/relation.js'
 import { projectRouter } from './routes/project.js'
 import { sseHandler, isOpencodeConnected } from './sse/broadcaster.js'
 
-export function createApp() {
+type AppOptions = {
+  staticDir?: string
+}
+
+export function createApp(options: AppOptions = {}) {
   const app = new Hono()
 
   app.onError((err, c) => {
@@ -35,6 +42,17 @@ export function createApp() {
   app.route('/', systemRouter)
   app.route('/', relationRouter)
   app.route('/', projectRouter)
+
+  // Static file serving for production CLI mode — must come after all /api routes
+  if (options.staticDir) {
+    app.use('*', serveStatic({ root: options.staticDir }))
+    // SPA fallback: serve index.html for any unmatched non-API path
+    app.use('*', async (c) => {
+      if (c.req.path.startsWith('/api')) return c.notFound()
+      const html = await readFile(join(options.staticDir!, 'index.html'), 'utf-8')
+      return c.html(html)
+    })
+  }
 
   return app
 }

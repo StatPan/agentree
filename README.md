@@ -8,6 +8,32 @@ Agentree sits on top of opencode and adds a visual layer: see all your running s
 
 ---
 
+## Quick start
+
+If you already have [opencode](https://opencode.ai) running:
+
+```bash
+npx agentree
+```
+
+Agentree auto-detects opencode on `localhost:6543` or `localhost:4096`. Open http://localhost:3001 in your browser.
+
+**Options**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--port`, `-p` | `3001` | Port for Agentree |
+| `--opencode-url` | auto-detect | opencode server URL |
+
+```bash
+npx agentree --port 8080 --opencode-url http://localhost:6543
+```
+
+**DB location:** `~/.agentree/agentree.db`  
+Override with `DB_PATH=./agentree.db npx agentree`.
+
+---
+
 ## How it works
 
 ```
