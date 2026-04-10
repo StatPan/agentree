@@ -193,3 +193,38 @@ describe('applyEvent — todo.updated', () => {
     ])
   })
 })
+
+describe('project filtering — activeProjectKey', () => {
+  beforeEach(resetStore)
+
+  function sessionWithProject(id: string, projectId: string) {
+    return { ...session(id), projectId }
+  }
+
+  it('shows all sessions when activeProjectKey is null', () => {
+    useAgentStore.getState().applySessionTree({
+      sessions: [sessionWithProject('a', 'p1'), sessionWithProject('b', 'p2')],
+    })
+    expect(useAgentStore.getState().nodes).toHaveLength(2)
+  })
+
+  it('filters to only matching project sessions when activeProjectKey is set', () => {
+    useAgentStore.getState().applySessionTree({
+      sessions: [sessionWithProject('a', 'p1'), sessionWithProject('b', 'p2'), sessionWithProject('c', 'p1')],
+    })
+    useAgentStore.getState().setActiveProjectKey('p1')
+    const nodeIds = useAgentStore.getState().nodes.map((n) => n.id)
+    expect(nodeIds.sort()).toEqual(['a', 'c'])
+  })
+
+  it('returns to all sessions when activeProjectKey is cleared', () => {
+    useAgentStore.getState().applySessionTree({
+      sessions: [sessionWithProject('a', 'p1'), sessionWithProject('b', 'p2')],
+    })
+    useAgentStore.getState().setActiveProjectKey('p1')
+    expect(useAgentStore.getState().nodes).toHaveLength(1)
+
+    useAgentStore.getState().setActiveProjectKey(null)
+    expect(useAgentStore.getState().nodes).toHaveLength(2)
+  })
+})

@@ -39,6 +39,13 @@ export function renameProject(id: string, name: string): void {
 }
 
 export function createProject(name: string, directoryKey: string | null): ProjectRow {
+  if (directoryKey) {
+    const existing = db.select().from(project).where(eq(project.directory_key, directoryKey)).get()
+    if (existing) {
+      db.update(project).set({ name, user_created: 1 }).where(eq(project.id, existing.id)).run()
+      return db.select().from(project).where(eq(project.id, existing.id)).get()!
+    }
+  }
   const id = randomUUID()
   db.insert(project).values({ id, name, directory_key: directoryKey, user_created: 1 }).run()
   return db.select().from(project).where(eq(project.id, id)).get()!

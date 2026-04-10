@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { and, eq, isNull, or } from 'drizzle-orm'
-import { sessionRelation, taskInvocation } from './schema.js'
+import { project, sessionRelation, taskInvocation } from './schema.js'
+import { randomUUID } from 'crypto'
 
 // Build an isolated in-memory DB with just the tables we need
 function makeTestDb() {
@@ -204,5 +205,79 @@ describe('task_invocation collaboration contract', () => {
     expect(synthesized).toContain('ALPHA=RED-734')
     expect(synthesized).toContain('BETA=BLUE-912')
     expect(synthesized.includes('ALPHA=RED-734') && synthesized.includes('BETA=BLUE-912')).toBe(true)
+  })
+})
+
+describe('createProject', () => {
+  function makeProjectDb() {
+    const sqlite = new Database(':memory:')
+    sqlite.exec(`
+      CREATE TABLE project (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        directory_key TEXT UNIQUE,
+        user_created INTEGER DEFAULT 0 NOT NULL,
+        created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')) NOT NULL
+      )
+    `)
+    const db = drizzle(sqlite, { schema: { project } })
+    return {
+      create(name: string, directoryKey: string | null) {
+        if (directoryKey) {
+          const existing = db.select().from(project).where(eq(project.directory_key, directoryKey)).get()
+          if (existing) {
+            db.update(project).set({ name, user_created: 1 }).where(eq(project.id, existing.id)).run()
+            return db.select().from(project).where(eq(project.id, existing.id)).get()!
+          }
+        }
+        const id = randomUUID()
+        db.insert(project).values({ id, name, directory_key: directoryKey, user_created: 1 }).run()
+        return db.select().from(project).where(eq(project.id, id)).get()!
+      },
+      findOrCreate(directoryKey: string) {
+        const existing = db.select().from(project).where(eq(project.directory_key, directoryKey)).get()
+        if (existing) return existing
+        const id = randomUUID()
+        db.insert(project).values({ id, name: directoryKey, directory_key: directoryKey }).run()
+        return db.select().from(project).where(eq(project.id, id)).get()!
+      },
+      getAll() {
+        return db.select().from(project).all()
+      },
+    }
+  }
+
+  it('creates a project with user_created=1', () => {
+    const db = makeProjectDb()
+    const proj = db.create('My Project', null)
+    expect(proj.name).toBe('My Project')
+    expect(proj.user_created).toBe(1)
+    expect(proj.directory_key).toBeNull()
+  })
+
+  it('creates a project with directory_key', () => {
+    const db = makeProjectDb()
+    const proj = db.create('Apps', 'apps/myapp')
+    expect(proj.directory_key).toBe('apps/myapp')
+    expect(proj.user_created).toBe(1)
+  })
+
+  it('promotes auto-created project when directory_key matches', () => {
+    const db = makeProjectDb()
+    const auto = db.findOrCreate('apps/myapp')
+    expect(auto.user_created).toBe(0)
+
+    const promoted = db.create('My App', 'apps/myapp')
+    expect(promoted.id).toBe(auto.id)
+    expect(promoted.name).toBe('My App')
+    expect(promoted.user_created).toBe(1)
+    expect(db.getAll()).toHaveLength(1)
+  })
+
+  it('allows multiple projects with null directory_key', () => {
+    const db = makeProjectDb()
+    db.create('A', null)
+    db.create('B', null)
+    expect(db.getAll()).toHaveLength(2)
   })
 })
