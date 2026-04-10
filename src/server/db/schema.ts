@@ -3,7 +3,8 @@ import { sqliteTable, text, real, integer } from 'drizzle-orm/sqlite-core'
 export const project = sqliteTable('project', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
-  directory_key: text('directory_key').notNull().unique(),
+  directory_key: text('directory_key').unique(),
+  user_created: integer('user_created').default(0).notNull(),
   created_at: text('created_at').notNull().default("strftime('%Y-%m-%dT%H:%M:%SZ', 'now')"),
 })
 

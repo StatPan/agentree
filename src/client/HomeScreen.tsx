@@ -137,6 +137,24 @@ export function HomeScreen() {
   const statusBySession = useAgentStore((s) => s.statusBySession)
   const setActiveProjectKey = useAgentStore((s) => s.setActiveProjectKey)
   const setAppView = useAgentStore((s) => s.setAppView)
+  const createProject = useAgentStore((s) => s.createProject)
+  const [creating, setCreating] = useState(false)
+  const [newName, setNewName] = useState('')
+
+  async function handleCreateProject() {
+    const name = newName.trim()
+    if (!name) return
+    setCreating(true)
+    try {
+      const proj = await createProject(name)
+      setNewName('')
+      enterProject(proj.id)
+    } catch (err) {
+      console.error('[HomeScreen] create project failed', err)
+    } finally {
+      setCreating(false)
+    }
+  }
 
   const projectStats = projects.map((project) => {
     const projectSessions = sessions.filter((s) => s.projectId === project.id)
@@ -190,21 +208,56 @@ export function HomeScreen() {
             {projects.length} project{projects.length !== 1 ? 's' : ''}, {sessions.length} session{sessions.length !== 1 ? 's' : ''}
           </span>
         </div>
-        <button
-          onClick={viewAll}
-          style={{
-            background: 'none',
-            border: '1px solid #334155',
-            color: '#94a3b8',
-            borderRadius: 8,
-            padding: '6px 14px',
-            fontSize: 12,
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-        >
-          View All Sessions
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            placeholder="New project name"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void handleCreateProject() }}
+            style={{
+              background: '#1e293b',
+              border: '1px solid #334155',
+              borderRadius: 8,
+              color: '#e2e8f0',
+              fontSize: 12,
+              padding: '6px 10px',
+              outline: 'none',
+              width: 180,
+            }}
+          />
+          <button
+            onClick={() => void handleCreateProject()}
+            disabled={creating || !newName.trim()}
+            style={{
+              background: '#1d4ed8',
+              color: '#eff6ff',
+              border: 'none',
+              borderRadius: 8,
+              padding: '6px 14px',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: newName.trim() ? 'pointer' : 'default',
+              opacity: newName.trim() ? 1 : 0.5,
+            }}
+          >
+            + New Project
+          </button>
+          <button
+            onClick={viewAll}
+            style={{
+              background: 'none',
+              border: '1px solid #334155',
+              color: '#94a3b8',
+              borderRadius: 8,
+              padding: '6px 14px',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            View All
+          </button>
+        </div>
       </div>
 
       {/* Project grid */}
@@ -226,8 +279,8 @@ export function HomeScreen() {
               gap: 12,
             }}
           >
-            <span style={{ color: '#374151', fontSize: 14 }}>No projects yet</span>
-            <span style={{ color: '#374151', fontSize: 12 }}>Sessions will appear here once opencode is connected</span>
+            <span style={{ color: '#475569', fontSize: 14 }}>No projects yet</span>
+            <span style={{ color: '#374151', fontSize: 12 }}>Create a project to organize your agent sessions</span>
           </div>
         ) : (
           <div
