@@ -32,6 +32,22 @@ npx agentree --port 8080 --opencode-url http://localhost:6543
 **DB location:** `~/.agentree/agentree.db`  
 Override with `DB_PATH=./agentree.db npx agentree`.
 
+### Docker
+
+**Already have opencode running:**
+
+```bash
+docker compose up agentree
+```
+
+**Need opencode too (full stack):**
+
+```bash
+docker compose --profile with-opencode up
+```
+
+Open http://localhost:3001 in your browser.
+
 ---
 
 ## How it works
