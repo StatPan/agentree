@@ -322,7 +322,7 @@ export function AgentCanvas() {
               fetchJson('/api/session', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: title.trim() || undefined }),
+                body: JSON.stringify({ title: title.trim() || undefined, projectId: activeProjectKey || undefined }),
               })
                 .then((session) => {
                   if (session?.id) setSelectedSession(session.id)

@@ -43,6 +43,13 @@
       "when": 1744416000000,
       "tag": "0005_projects",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1744502400000,
+      "tag": "0006_project_hierarchy",
+      "breakpoints": true
     }
   ]
 }

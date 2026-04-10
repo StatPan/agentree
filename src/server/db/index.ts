@@ -38,6 +38,12 @@ export function renameProject(id: string, name: string): void {
   db.update(project).set({ name }).where(eq(project.id, id)).run()
 }
 
+export function createProject(name: string, directoryKey: string | null): ProjectRow {
+  const id = randomUUID()
+  db.insert(project).values({ id, name, directory_key: directoryKey, user_created: 1 }).run()
+  return db.select().from(project).where(eq(project.id, id)).get()!
+}
+
 export function deleteProject(id: string): void {
   db.update(canvasNode).set({ project_id: null }).where(eq(canvasNode.project_id, id)).run()
   db.delete(project).where(eq(project.id, id)).run()

@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { getAllCanvasNodes, getAllProjects, getAllSessionForks, getAllSessionRelations, getAllTaskInvocations, findOrCreateProject, setCanvasNodeProject } from '../db/index.js'
+import type { ProjectRow } from '../db/schema.js'
 import { opencodeAdapter } from '../opencode/index.js'
 
 export const treeRouter = new Hono()
@@ -33,7 +34,7 @@ treeRouter.get('/api/tree', async (c) => {
   const compat = compatResult.status === 'fulfilled' ? compatResult.value : null
 
   // Auto-create projects for each unique directory key and assign sessions
-  const projectByDirectoryKey = new Map<string, { id: string; name: string; directory_key: string; created_at: string }>()
+  const projectByDirectoryKey = new Map<string, ProjectRow>()
   for (const session of sessions) {
     const dirKey = projectGroupFromDirectory(session.directory)
     if (!projectByDirectoryKey.has(dirKey)) {
