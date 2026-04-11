@@ -77,6 +77,7 @@ type SessionInfo = {
   projectId?: string | null
   time: { created: number; updated: number }
   forkedFromSessionID?: string | null
+  share?: { url: string } | null
   canvas?: {
     label?: string | null
     x?: number

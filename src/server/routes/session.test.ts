@@ -22,7 +22,6 @@ vi.mock('../opencode/index.js', () => ({
 }))
 
 vi.mock('../db/index.js', () => ({
-  saveSessionFork: vi.fn(),
   saveSessionRelation: vi.fn(),
   getTaskInvocationsForSession: vi.fn(),
   upsertTaskInvocation: vi.fn(),
@@ -30,7 +29,7 @@ vi.mock('../db/index.js', () => ({
 }))
 
 import { opencodeAdapter } from '../opencode/index.js'
-import { saveSessionFork, saveSessionRelation, cleanupSessionData, getTaskInvocationsForSession, upsertTaskInvocation } from '../db/index.js'
+import { saveSessionRelation, cleanupSessionData, getTaskInvocationsForSession, upsertTaskInvocation } from '../db/index.js'
 import { sessionRouter } from './session.js'
 
 const app = new Hono()
@@ -136,7 +135,6 @@ describe('POST /api/session/:id/fork', () => {
     })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual(forked)
-    expect(saveSessionFork).toHaveBeenCalledWith('sess-2', 'sess-1')
     expect(saveSessionRelation).toHaveBeenCalledWith('sess-1', 'sess-2', 'fork')
   })
 

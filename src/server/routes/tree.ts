@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { getAllCanvasNodes, getAllProjects, getAllSessionForks, getAllSessionRelations, getAllTaskInvocations, findOrCreateProject, setCanvasNodeProject } from '../db/index.js'
+import { getAllCanvasNodes, getAllProjects, getForkRelationMap, getAllSessionRelations, getAllTaskInvocations, findOrCreateProject, setCanvasNodeProject } from '../db/index.js'
 import type { ProjectRow } from '../db/schema.js'
 import { opencodeAdapter } from '../opencode/index.js'
 
@@ -73,9 +73,7 @@ treeRouter.get('/api/tree', async (c) => {
     }
   }
 
-  const forksBySession = new Map(
-    getAllSessionForks().map((fork) => [fork.session_id, fork.forked_from_session_id]),
-  )
+  const forksBySession = getForkRelationMap()
   const relations = getAllSessionRelations()
   const taskInvocations = getAllTaskInvocations()
   const projects = getAllProjects()

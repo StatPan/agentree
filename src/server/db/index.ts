@@ -138,6 +138,15 @@ export function getAllSessionForks() {
   return db.select().from(sessionFork).all()
 }
 
+export function getForkRelationMap(): Map<string, string> {
+  const rows = db
+    .select()
+    .from(sessionRelation)
+    .where(eq(sessionRelation.relation_type, 'fork'))
+    .all()
+  return new Map(rows.map((r) => [r.to_session_id, r.from_session_id]))
+}
+
 export function saveSessionRelation(
   fromSessionId: string,
   toSessionId: string,

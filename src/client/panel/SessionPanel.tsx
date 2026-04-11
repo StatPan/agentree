@@ -53,6 +53,10 @@ type SessionMessage = {
 type SessionDetails = {
   id: string
   title?: string
+  directory?: string
+  parentID?: string | null
+  time?: { created?: number; updated?: number }
+  share?: { url: string } | null
 }
 
 // ─── Type guards ─────────────────────────────────────────────────────────────
@@ -503,6 +507,8 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
   const [linkOpen, setLinkOpen] = useState(false)
   const [linkTarget, setLinkTarget] = useState('')
   const [linkType, setLinkType] = useState<'linked' | 'detached'>('linked')
+  const [sharing, setSharing] = useState(false)
+  const [localShareUrl, setLocalShareUrl] = useState<string | null>(null)
 
   const status = node?.data.status ?? 'idle'
   const title = node?.data.label || session?.title || `${sessionId.slice(0, 8)}…`
@@ -523,7 +529,11 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
     (sum, m) => sum + (m.info.tokens?.input ?? 0) + (m.info.tokens?.output ?? 0),
     0,
   )
-  const hasMetadata = metaModel || metaCwd || totalCost > 0
+  const metaAgent = firstAssistant?.info.agent
+  const metaDirectory = selectedSession?.directory ?? session?.directory
+  const metaCreatedAt = selectedSession?.time.created ?? session?.time?.created
+  const effectiveShareUrl = localShareUrl
+  const hasMetadata = metaModel || metaCwd || totalCost > 0 || metaDirectory || Boolean(metaCreatedAt) || Boolean(metaAgent)
 
   const questionItems = useMemo(() => {
     const value = pendingQuestion
@@ -564,6 +574,7 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
       .then(([sessionData, messagesData]) => {
         if (cancelled) return
         setSession(sessionData)
+        setLocalShareUrl((sessionData as SessionDetails).share?.url ?? null)
         setMessages(Array.isArray(messagesData) ? messagesData : [])
       })
       .catch((err) => {
@@ -742,6 +753,36 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
     }
   }
 
+  async function handleShare() {
+    setSharing(true)
+    setError(null)
+    try {
+      const data = await fetchJson(`/api/session/${sessionId}/share`, { method: 'POST' }) as SessionDetails
+      const url = data.share?.url ?? null
+      setLocalShareUrl(url)
+      if (url) {
+        try { await navigator.clipboard.writeText(url) } catch { }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSharing(false)
+    }
+  }
+
+  async function handleUnshare() {
+    setSharing(true)
+    setError(null)
+    try {
+      await fetchJson(`/api/session/${sessionId}/share`, { method: 'DELETE' })
+      setLocalShareUrl(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSharing(false)
+    }
+  }
+
   return (
     <>
       {/* Pulse animation for running tool dots */}
@@ -831,6 +872,18 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
           {/* Session metadata */}
           {hasMetadata && (
             <div style={{ marginTop: 10, background: '#0d1117', borderRadius: 6, padding: '8px 10px', fontSize: 10, fontFamily: 'monospace', display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {metaDirectory && (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <span style={{ color: '#4b5563', width: 44, flexShrink: 0 }}>dir</span>
+                  <span style={{ color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{truncateCwd(metaDirectory)}</span>
+                </div>
+              )}
+              {metaCreatedAt && (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <span style={{ color: '#4b5563', width: 44, flexShrink: 0 }}>created</span>
+                  <span style={{ color: '#6b7280' }}>{formatTime(metaCreatedAt)}</span>
+                </div>
+              )}
               {(metaModel || metaProvider) && (
                 <div style={{ display: 'flex', gap: 8 }}>
                   <span style={{ color: '#4b5563', width: 44, flexShrink: 0 }}>model</span>
@@ -838,6 +891,12 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
                     {metaModel ?? ''}
                     {metaProvider && <span style={{ color: '#6b7280' }}> · {metaProvider}</span>}
                   </span>
+                </div>
+              )}
+              {metaAgent && (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <span style={{ color: '#4b5563', width: 44, flexShrink: 0 }}>agent</span>
+                  <span style={{ color: '#9ca3af' }}>{metaAgent}</span>
                 </div>
               )}
               {metaCwd && (
@@ -867,6 +926,26 @@ export function SessionPanel({ sessionId }: { sessionId: string }) {
             onRefreshTree={() => refreshTree()}
             onError={(msg) => setError(msg)}
           />
+          <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            {effectiveShareUrl ? (
+              <>
+                <button
+                  onClick={() => { try { void navigator.clipboard.writeText(effectiveShareUrl) } catch { } }}
+                  title={effectiveShareUrl}
+                  style={{ background: '#134e4a', border: '1px solid #14b8a6', borderRadius: 6, color: '#5eead4', fontSize: 10, fontWeight: 700, padding: '3px 8px', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}
+                >
+                  🔗 Shared — copy URL
+                </button>
+                <button onClick={() => void handleUnshare()} disabled={sharing} style={{ background: 'none', border: '1px solid #374151', borderRadius: 6, color: '#6b7280', fontSize: 10, padding: '3px 8px', cursor: 'pointer' }}>
+                  Unshare
+                </button>
+              </>
+            ) : (
+              <button onClick={() => void handleShare()} disabled={sharing} style={{ background: 'none', border: '1px solid #374151', borderRadius: 6, color: '#6b7280', fontSize: 10, padding: '3px 8px', cursor: 'pointer' }}>
+                {sharing ? 'Sharing…' : 'Share'}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Permission */}

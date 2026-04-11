@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { randomUUID } from 'crypto'
-import { saveSessionFork, saveSessionRelation, cleanupSessionData, getTaskInvocationsForSession, upsertTaskInvocation, setCanvasNodeProject } from '../db/index.js'
+import { saveSessionRelation, cleanupSessionData, getTaskInvocationsForSession, upsertTaskInvocation, setCanvasNodeProject } from '../db/index.js'
 import { opencodeAdapter } from '../opencode/index.js'
 
 export const sessionRouter = new Hono()
@@ -85,7 +85,6 @@ sessionRouter.post('/api/session/:id/fork', async (c) => {
     }
   }
   const session = await opencodeAdapter.forkSession({ sessionID, messageID: body.messageID })
-  saveSessionFork(session.id, sessionID)
   saveSessionRelation(sessionID, session.id, 'fork')
   return c.json(session)
 })
