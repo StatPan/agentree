@@ -44,7 +44,7 @@ function updatePendingState(event: AnyEvent) {
     pendingPermissions.set(requestId, {
       requestId,
       sessionId,
-      message: typeof p.message === 'string' ? p.message : '',
+      message: typeof p.title === 'string' ? p.title : typeof p.command === 'string' ? p.command : typeof p.description === 'string' ? p.description : '',
       metadata: p,
     })
   } else if (event.type === 'permission.replied') {
@@ -54,7 +54,7 @@ function updatePendingState(event: AnyEvent) {
     pendingQuestions.set(requestId, {
       requestId,
       sessionId,
-      message: typeof p.message === 'string' ? p.message : '',
+      message: typeof p.title === 'string' ? p.title : typeof p.command === 'string' ? p.command : typeof p.description === 'string' ? p.description : '',
       metadata: p,
     })
   } else if (event.type === 'question.replied' || event.type === 'question.rejected') {
