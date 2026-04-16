@@ -156,6 +156,8 @@ export function AgentCanvas() {
   const onNodesChange = useAgentStore((s) => s.onNodesChange)
   const pinNode = useAgentStore((s) => s.pinNode)
   const addRelation = useAgentStore((s) => s.addRelation)
+  const sseStatus = useAgentStore((s) => s.sseStatus)
+  const setSseStatus = useAgentStore((s) => s.setSseStatus)
   const hasFramedInitialView = useRef(false)
   const [pendingConn, setPendingConn] = useState<{ source: string; target: string } | null>(null)
   const [treeError, setTreeError] = useState<string | null>(null)
@@ -208,10 +210,22 @@ export function AgentCanvas() {
     let es: EventSource | null = null
     let cancelled = false
     let retryTimeout: ReturnType<typeof setTimeout> | null = null
+    let retryMs = 1000
+    const MAX_RETRY_MS = 30_000
+    let hasConnectedOnce = false
 
     function connect() {
       if (cancelled) return
       es = new EventSource('/api/events')
+      es.onopen = () => {
+        const shouldReloadTree = hasConnectedOnce
+        hasConnectedOnce = true
+        retryMs = 1000
+        setSseStatus('connected')
+        if (shouldReloadTree) {
+          reloadTree().catch(console.error)
+        }
+      }
       es.onmessage = (e) => {
         try {
           const event = JSON.parse(e.data)
@@ -222,10 +236,16 @@ export function AgentCanvas() {
         } catch (err) { console.warn('[sse] failed to parse event:', err) }
       }
       es.onerror = () => {
-        console.warn('[sse] connection lost, reconnecting in 3s...')
         es?.close()
         es = null
-        if (!cancelled) retryTimeout = setTimeout(connect, 3000)
+        if (!cancelled) {
+          const delay = retryMs
+          retryMs = Math.min(retryMs * 2, MAX_RETRY_MS)
+          const status = delay >= MAX_RETRY_MS ? 'disconnected' : 'reconnecting'
+          setSseStatus(status)
+          console.warn(`[sse] connection lost, reconnecting in ${delay / 1000}s...`)
+          retryTimeout = setTimeout(connect, delay)
+        }
       }
     }
 
@@ -297,6 +317,26 @@ export function AgentCanvas() {
           <button onClick={() => void reloadTree()} style={{ background: 'none', border: '1px solid #fca5a5', color: '#fca5a5', borderRadius: 4, fontSize: 11, cursor: 'pointer', padding: '2px 8px' }}>
             Retry
           </button>
+        </div>
+      )}
+      {sseStatus !== 'connected' && (
+        <div style={{
+          position: 'absolute', top: treeError ? 60 : 16, left: '50%', transform: 'translateX(-50%)', zIndex: 20,
+          background: sseStatus === 'disconnected' ? '#1c1917' : '#1c1917',
+          border: `1px solid ${sseStatus === 'disconnected' ? '#ef4444' : '#f59e0b'}`,
+          color: sseStatus === 'disconnected' ? '#fca5a5' : '#fcd34d',
+          padding: '6px 14px', borderRadius: 8,
+          fontSize: 12, display: 'flex', alignItems: 'center', gap: 8,
+          whiteSpace: 'nowrap',
+        }}>
+          <span
+            style={{
+              width: 7, height: 7, borderRadius: '50%',
+              background: sseStatus === 'disconnected' ? '#ef4444' : '#f59e0b',
+              flexShrink: 0,
+            }}
+          />
+          {sseStatus === 'disconnected' ? 'Disconnected from server' : 'Reconnecting…'}
         </div>
       )}
       <div

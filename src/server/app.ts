@@ -10,6 +10,7 @@ import { approvalRouter } from './routes/approval.js'
 import { systemRouter } from './routes/system.js'
 import { relationRouter } from './routes/relation.js'
 import { projectRouter } from './routes/project.js'
+import { agentRouter } from './routes/agent.js'
 import { sseHandler, isOpencodeConnected } from './sse/broadcaster.js'
 
 type AppOptions = {
@@ -42,6 +43,7 @@ export function createApp(options: AppOptions = {}) {
   app.route('/', systemRouter)
   app.route('/', relationRouter)
   app.route('/', projectRouter)
+  app.route('/', agentRouter)
 
   // Static file serving for production CLI mode — must come after all /api routes
   if (options.staticDir) {
