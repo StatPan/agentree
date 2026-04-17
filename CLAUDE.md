@@ -24,11 +24,11 @@ Figma-like infinite canvas for supervising live OpenCode agent session trees in 
 - PR #11 merged (project creation + canvas filtering)
 
 ## Active Objective
-Phase 6: TBD
+Phase 6: `GET /api/agent/tree` 감독용 조회 API + SSE 재연결/오류복구 마무리
 
 ### Candidates (Future Roadmap):
-- Supervisor agent support (compact /api/tree for agent consumption)
 - Project v2: manual session reassignment, colors/icons, filtering
+- 추가 agent-facing compact API는 현재 Phase 6 acceptance 이후 재평가
 
 ## PM Role
 
@@ -60,5 +60,5 @@ Phase 6: TBD
 - opencode SDK (@opencode-ai/sdk) -- upstream API surface
 
 ## Future Roadmap
-- Supervisor agent support (compact /api/tree for agent consumption)
 - Project v2: manual session reassignment, colors/icons, filtering
+- 추가 compact API / agent-facing API는 Phase 6 종료 후 별도 판단
