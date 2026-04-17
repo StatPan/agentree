@@ -15,6 +15,7 @@ export const STATUS_COLORS: Record<NodeStatus, string> = {
 export type ViewMode = 'recent' | 'all'
 export type RelationType = 'fork' | 'linked' | 'detached'
 export type AppView = 'home' | 'canvas'
+export type SseStatus = 'connected' | 'reconnecting' | 'disconnected'
 export type ActiveProjectKey = string | null
 
 export type Project = {
@@ -542,6 +543,8 @@ type AgentStore = {
   appView: AppView
   activeProjectKey: string | null
   pendingScrollToSessionId: string | null
+  sseStatus: SseStatus
+  setSseStatus: (status: SseStatus) => void
   addRelation: (fromSessionId: string, toSessionId: string, relationType: string) => Promise<void>
   removeRelation: (id: number) => Promise<void>
   setSelectedSession: (id: string | null) => void
@@ -578,6 +581,8 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   appView: 'home',
   activeProjectKey: null,
   pendingScrollToSessionId: null,
+  sseStatus: 'disconnected',
+  setSseStatus: (status) => set({ sseStatus: status }),
 
   addRelation: async (fromSessionId, toSessionId, relationType) => {
     const res = await fetch('/api/relation', {

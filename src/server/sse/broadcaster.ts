@@ -11,6 +11,57 @@ const clients = new Set<(event: AnyEvent) => void>()
 let connected = false
 export function isOpencodeConnected() { return connected }
 
+// Phase 6: In-memory pending state for supervisor API
+export type PendingPermission = {
+  requestId: string
+  sessionId: string
+  message: string
+  metadata: Record<string, unknown>
+}
+export type PendingQuestion = {
+  requestId: string
+  sessionId: string
+  message: string
+  metadata: Record<string, unknown>
+}
+const pendingPermissions = new Map<string, PendingPermission>()
+const pendingQuestions = new Map<string, PendingQuestion>()
+
+export function getPendingPermissions(): PendingPermission[] {
+  return [...pendingPermissions.values()]
+}
+export function getPendingQuestions(): PendingQuestion[] {
+  return [...pendingQuestions.values()]
+}
+
+function updatePendingState(event: AnyEvent) {
+  const p = event.properties
+  const sessionId = (typeof p.sessionID === 'string' ? p.sessionID : '') || ''
+  const requestId = (typeof p.requestID === 'string' ? p.requestID : '') || ''
+
+  if (event.type === 'permission.asked' || event.type === 'permission.updated') {
+    if (!requestId || !sessionId) return
+    pendingPermissions.set(requestId, {
+      requestId,
+      sessionId,
+      message: typeof p.title === 'string' ? p.title : typeof p.command === 'string' ? p.command : typeof p.description === 'string' ? p.description : '',
+      metadata: p,
+    })
+  } else if (event.type === 'permission.replied') {
+    if (requestId) pendingPermissions.delete(requestId)
+  } else if (event.type === 'question.asked' || event.type === 'question.updated') {
+    if (!requestId || !sessionId) return
+    pendingQuestions.set(requestId, {
+      requestId,
+      sessionId,
+      message: typeof p.title === 'string' ? p.title : typeof p.command === 'string' ? p.command : typeof p.description === 'string' ? p.description : '',
+      metadata: p,
+    })
+  } else if (event.type === 'question.replied' || event.type === 'question.rejected') {
+    if (requestId) pendingQuestions.delete(requestId)
+  }
+}
+
 function broadcast(event: AnyEvent) {
   for (const send of clients) {
     try { send(event) } catch {}
@@ -71,6 +122,7 @@ export async function startOpencodeListener(): Promise<void> {
         const payload = event as AnyEvent
         if (payload) {
           trackTaskLineage(payload)
+          updatePendingState(payload)
           broadcast(payload)
         }
       }
