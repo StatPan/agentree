@@ -1,22 +1,10 @@
 import { Hono } from 'hono'
-import { getAllCanvasNodes, getAllProjects, getAllSessionRelations, getAllTaskInvocations, getForkRelationMap, findOrCreateProject, setCanvasNodeProject } from '../db/index.js'
+import { getAllCanvasNodes, getAllProjects, getAllSessionRelations, getAllTaskInvocations, getForkRelationMap } from '../db/index.js'
 import { opencodeAdapter } from '../opencode/index.js'
 import { getPendingPermissions, getPendingQuestions } from '../sse/broadcaster.js'
+import { projectGroupFromDirectory } from '../utils/projectGroup.js'
 
 export const agentRouter = new Hono()
-
-function projectGroupFromDirectory(directory: string): string {
-  const marker = '/workspace/'
-  const index = directory.indexOf(marker)
-  const normalized = index >= 0 ? directory.slice(index + marker.length) : directory.replace(/^\/+/, '')
-  const parts = normalized.split('/').filter(Boolean)
-  if (parts.length === 0) return 'workspace'
-  const bucketPrefixes = new Set(['apps', 'research', 'pypi_lib', 'libs', 'infra', 'skills', 'mcps', 'anal-repo'])
-  if (parts.length >= 2 && bucketPrefixes.has(parts[0])) {
-    return `${parts[0]}/${parts[1]}`
-  }
-  return parts[0]
-}
 
 /**
  * GET /api/agent/tree
@@ -41,16 +29,6 @@ agentRouter.get('/api/agent/tree', async (c) => {
   const sessions = sessionsResult.value
   const statusBySession = statusResult.status === 'fulfilled' ? statusResult.value : {}
 
-  // Auto-create/resolve projects (same logic as tree.ts)
-  const projectByDirectoryKey = new Map<string, { id: string; name: string }>()
-  for (const session of sessions) {
-    const dirKey = projectGroupFromDirectory(session.directory)
-    if (!projectByDirectoryKey.has(dirKey)) {
-      const proj = findOrCreateProject(dirKey)
-      projectByDirectoryKey.set(dirKey, proj)
-    }
-  }
-
   const canvasBySession = new Map(
     getAllCanvasNodes().map((node) => [
       node.session_id,
@@ -62,21 +40,6 @@ agentRouter.get('/api/agent/tree', async (c) => {
       },
     ]),
   )
-
-  for (const session of sessions) {
-    const dirKey = projectGroupFromDirectory(session.directory)
-    const proj = projectByDirectoryKey.get(dirKey)
-    if (!proj) continue
-    const canvas = canvasBySession.get(session.id)
-    if (!canvas?.projectId) {
-      setCanvasNodeProject(session.id, proj.id)
-      if (canvas) {
-        canvas.projectId = proj.id
-      } else {
-        canvasBySession.set(session.id, { label: null, pinned: false, detached: false, projectId: proj.id })
-      }
-    }
-  }
 
   const relations = getAllSessionRelations()
   const taskInvocations = getAllTaskInvocations()

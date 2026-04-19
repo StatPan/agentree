@@ -140,6 +140,17 @@ describe('GET /api/agent/tree', () => {
     expect(body.pendingQuestions[0].requestId).toBe('q-1')
   })
 
+  it('overrides session status when a pending question exists', async () => {
+    vi.mocked(getPendingQuestions).mockReturnValue([
+      { requestId: 'q-1', sessionId: 'sess-1', message: 'Which branch?', metadata: {} },
+    ])
+    const res = await app.request('/api/agent/tree')
+    expect(res.status).toBe(200)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = await res.json() as any
+    expect(body.sessions.find((s: { id: string }) => s.id === 'sess-1')?.status).toBe('needs-answer')
+  })
+
   it('overrides session status when a pending permission exists', async () => {
     vi.mocked(getPendingPermissions).mockReturnValue([
       { requestId: 'req-1', sessionId: 'sess-1', message: 'Allow file write?', metadata: {} },

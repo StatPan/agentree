@@ -35,9 +35,10 @@ Phase 6: `GET /api/agent/tree` 감독용 조회 API + SSE 재연결/오류복구
 이 세션(PM)의 역할은 분석·계획·검토다. 코드 편집은 Dev 세션에 위임한다.
 
 - **분석**: 관련 파일을 Read로 읽어 현재 구조와 맥락을 파악한다
-- **스펙 작성**: 대상 파일·변경 내용·이유·완료 기준을 포함한 구현 스펙을 작성한다
-- **Dev 세션 호출**: `cd {project_dir} && claude -p "{스펙}" --model sonnet --output-format json --dangerously-skip-permissions`
-- **결과 검토**: 변경된 파일을 Read로 확인하여 스펙 준수 여부와 코드 품질을 검토한다
+- **PRD 수신**: 오케스트레이터로부터 PRD(`~/workspace/statpan_docs/projects/_ORCHESTRATION/templates/PRD.md` 양식)를 받는다. PRD에는 목표 상태·Acceptance Criteria·Scope 경계가 포함된다.
+- **Tech Spec 작성**: PRD를 기반으로 `~/workspace/statpan_docs/projects/_ORCHESTRATION/templates/TECH_SPEC.md` 양식에 맞춰 Tech Spec을 작성한다. 저장 위치: `~/workspace/statpan_docs/projects/agentree/TechSpecs/`
+- **Dev 세션 호출**: Tech Spec 전문을 전달한다. `cd {project_dir} && claude -p "$(cat {tech_spec_path})" --model sonnet --output-format json --dangerously-skip-permissions`
+- **결과 검토**: Tech Spec의 Acceptance Criteria 항목별 evidence를 확인한다. evidence 없는 완료 보고는 불인정한다.
 
 코드를 직접 Edit/Write/Bash로 수정하지 않는다.
 
