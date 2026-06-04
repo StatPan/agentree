@@ -95,6 +95,45 @@ describe('importGiraWorkspaceStatus', () => {
     })
   })
 
+  it('keeps a missing branch identity distinct from a real branch named unknown-branch', () => {
+    const workMap = importGiraWorkspaceStatus({
+      queues: {
+        agent_ready: [
+          { repo: 'R/O', issue: 1, branch: 'unknown-branch', title: 'explicit' },
+          { repo: 'R/O', issue: 1, title: 'missing' },
+        ],
+      },
+    })
+
+    const explicitBranch = workMap.nodes.find((node) => node.identity.branch === 'unknown-branch')
+    const missingBranch = workMap.nodes.find((node) => node.identity.branch === null)
+
+    expect(workMap.nodes).toHaveLength(2)
+    expect(explicitBranch?.title).toBe('explicit')
+    expect(missingBranch?.title).toBe('missing')
+    expect(explicitBranch?.id).not.toBe(missingBranch?.id)
+    expect(explicitBranch?.identity.key).toBe('R/O#1@branch:unknown-branch')
+    expect(missingBranch?.identity.key).toBe('R/O#1@missing-branch')
+  })
+
+  it('skips ambiguous branchless parent edges instead of choosing the first matching branch node', () => {
+    const workMap = importGiraWorkspaceStatus({
+      queues: {
+        agent_ready: [
+          { repo: 'R/O', issue: 1, branch: 'a' },
+          { repo: 'R/O', issue: 1, branch: 'b' },
+          { repo: 'R/O', issue: 2, parent: { repo: 'R/O', issue: 1 } },
+        ],
+      },
+    })
+
+    expect(workMap.nodes).toHaveLength(3)
+    expect(workMap.edges).toEqual([])
+    expect(workMap.warnings).toContain(
+      'skipped parent edge because branchless ref R/O#1 matches multiple imported queue items (R/O#1@branch:a, R/O#1@branch:b)',
+    )
+  })
+
   it('returns warnings, not writes, for missing workspace queue data', () => {
     const workMap = importGiraWorkspaceStatus({ schema_version: 'unknown' })
 

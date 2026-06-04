@@ -108,6 +108,11 @@ type WorkIdentityRef = {
   branch: string | null
 }
 
+type RefResolution =
+  | { kind: 'found'; node: WorkNode }
+  | { kind: 'missing' }
+  | { kind: 'ambiguous'; ref: WorkIdentityRef; candidates: WorkNode[] }
+
 const STATUS_PRIORITY: Record<WorkNodeStatus, number> = {
   'failed-check': 80,
   blocked: 70,
@@ -188,17 +193,21 @@ function branchUrl(repo: string, branch: string) {
   return `${repoUrl(repo)}/tree/${encodeURIComponent(branch)}`
 }
 
+function branchIdentityPart(branch: string | null) {
+  return branch === null ? 'missing-branch' : `branch:${branch}`
+}
+
 function workNodeId(ref: WorkIdentityRef) {
   return [
     'gira',
     encodeURIComponent(ref.repo),
     String(ref.issue),
-    encodeURIComponent(ref.branch ?? 'unknown-branch'),
+    encodeURIComponent(branchIdentityPart(ref.branch)),
   ].join(':')
 }
 
 function workIdentityKey(ref: WorkIdentityRef) {
-  return `${ref.repo}#${ref.issue}@${ref.branch ?? 'unknown-branch'}`
+  return `${ref.repo}#${ref.issue}@${branchIdentityPart(ref.branch)}`
 }
 
 function collectQueueItems(queuesRoot: Record<string, unknown>, warnings: string[]): Array<{ queue: string; item: Record<string, unknown> }> {
@@ -515,10 +524,31 @@ function mergeNodes(left: WorkNode, right: WorkNode): WorkNode {
   }
 }
 
-function findNodeForRef(ref: WorkIdentityRef, nodesById: Map<string, WorkNode>): WorkNode | undefined {
+function refLabel(ref: WorkIdentityRef) {
+  return ref.branch === null ? `${ref.repo}#${ref.issue}` : `${ref.repo}#${ref.issue}@${ref.branch}`
+}
+
+function findNodeForRef(ref: WorkIdentityRef, nodesById: Map<string, WorkNode>): RefResolution {
   const exact = nodesById.get(workNodeId(ref))
-  if (exact || ref.branch !== null) return exact
-  return [...nodesById.values()].find((node) => node.identity.repo === ref.repo && node.identity.issue === ref.issue)
+  if (exact) return { kind: 'found', node: exact }
+  if (ref.branch !== null) return { kind: 'missing' }
+
+  const candidates = [...nodesById.values()].filter((node) => node.identity.repo === ref.repo && node.identity.issue === ref.issue)
+  if (candidates.length === 1) return { kind: 'found', node: candidates[0]! }
+  if (candidates.length > 1) return { kind: 'ambiguous', ref, candidates }
+  return { kind: 'missing' }
+}
+
+function ambiguousRefWarning(edgeKind: WorkEdge['kind'], resolutions: RefResolution[]) {
+  const refs = resolutions
+    .filter((resolution): resolution is Extract<RefResolution, { kind: 'ambiguous' }> => resolution.kind === 'ambiguous')
+    .map((resolution) => {
+      const candidates = resolution.candidates.map((node) => node.identity.key).sort().join(', ')
+      return `${refLabel(resolution.ref)} matches multiple imported queue items (${candidates})`
+    })
+    .join('; ')
+
+  return `skipped ${edgeKind} edge because branchless ref ${refs}`
 }
 
 function buildEdges(edgeRefs: EdgeRef[], nodesById: Map<string, WorkNode>, warnings: string[]): WorkEdge[] {
@@ -527,13 +557,17 @@ function buildEdges(edgeRefs: EdgeRef[], nodesById: Map<string, WorkNode>, warni
   for (const ref of edgeRefs) {
     const source = findNodeForRef(ref.from, nodesById)
     const target = findNodeForRef(ref.to, nodesById)
-    if (!source || !target) {
+    if (source.kind === 'ambiguous' || target.kind === 'ambiguous') {
+      warnings.push(ambiguousRefWarning(ref.kind, [source, target]))
+      continue
+    }
+    if (source.kind === 'missing' || target.kind === 'missing') {
       warnings.push(`skipped ${ref.kind} edge because one endpoint is not present in the imported queue items`)
       continue
     }
 
-    const id = `${ref.kind}:${source.id}:${target.id}`
-    edges.set(id, { id, source: source.id, target: target.id, kind: ref.kind, confidence: ref.confidence })
+    const id = `${ref.kind}:${source.node.id}:${target.node.id}`
+    edges.set(id, { id, source: source.node.id, target: target.node.id, kind: ref.kind, confidence: ref.confidence })
   }
 
   return [...edges.values()].sort((left, right) => left.id.localeCompare(right.id))
