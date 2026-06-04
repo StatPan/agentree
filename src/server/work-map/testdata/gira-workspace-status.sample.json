@@ -1,0 +1,141 @@
+{
+  "schema_version": "workspace-status/v1",
+  "workspace": {
+    "name": "personal",
+    "owner": "StatPan"
+  },
+  "workspace_queues": {
+    "schema_version": "workspace-queues/v1",
+    "workspace": {
+      "name": "personal",
+      "owner": "StatPan"
+    },
+    "queues": {
+      "agent_ready": [
+        {
+          "queue": "agent_ready",
+          "repo": "StatPan/agentree",
+          "issue": 18,
+          "title": "Add read-only Gira work-map import from workspace status JSON",
+          "state": "open",
+          "status": "status:ready",
+          "labels": ["status:ready", "area:agentree"],
+          "milestone": "Phase 7",
+          "branch": "issue-18-gira-work-map-import",
+          "reason_codes": ["ready_without_pr"],
+          "evidence": {
+            "ticket_readiness": "ready",
+            "next_action": "start_agent"
+          },
+          "next_safe_command": "gira ticket start --repo StatPan/agentree --ticket 18 --apply"
+        }
+      ],
+      "review_needed": [
+        {
+          "queue": "review_needed",
+          "repo": "StatPan/gira",
+          "issue": 686,
+          "title": "Define worker-run/v1 manifest",
+          "state": "open",
+          "status": "status:in-review",
+          "labels": ["status:in-review", "agent:codex"],
+          "branch": "issue-686-worker-run-manifest",
+          "pull_request": {
+            "number": 687,
+            "url": "https://github.com/StatPan/gira/pull/687",
+            "state": "OPEN",
+            "draft": false,
+            "review_decision": "REVIEW_REQUIRED"
+          },
+          "evidence": {
+            "pr_readiness": "review_needed",
+            "checks_status": {
+              "status": "passing",
+              "conclusion": "success",
+              "summary": "all required checks passed"
+            },
+            "review_status": {
+              "state": "review_required",
+              "decision": "REVIEW_REQUIRED"
+            },
+            "next_action": "request_review"
+          },
+          "reason_codes": ["review_required"],
+          "next_safe_command": "gira ticket review --repo StatPan/gira --ticket 686 --diff-summary --json",
+          "parent": {
+            "repo": "StatPan/agentree",
+            "issue": 18
+          }
+        }
+      ],
+      "failed_check": [
+        {
+          "queue": "failed_check",
+          "repo": "StatPan/gira",
+          "issue": 686,
+          "title": "Define worker-run/v1 manifest",
+          "state": "open",
+          "status": "status:in-review",
+          "labels": ["status:in-review", "agent:codex"],
+          "branch": "issue-686-worker-run-manifest",
+          "pull_request": {
+            "number": 687,
+            "url": "https://github.com/StatPan/gira/pull/687",
+            "state": "OPEN",
+            "draft": false,
+            "review_decision": "REVIEW_REQUIRED"
+          },
+          "evidence": {
+            "checks_status": {
+              "status": "failing",
+              "conclusion": "failure",
+              "summary": "docs build failed"
+            },
+            "next_action": "inspect_failed_checks"
+          },
+          "reason_codes": ["checks_failed"],
+          "blockers": ["docs build failed"],
+          "next_safe_command": "gira ticket status --repo StatPan/gira --ticket 686 --json",
+          "parent": {
+            "repo": "StatPan/agentree",
+            "issue": 18
+          }
+        }
+      ],
+      "human_decision": [
+        {
+          "queue": "human_decision",
+          "repo": "StatPan/backlog",
+          "issue": 31,
+          "title": "Keycloak brokered social auth cross-repo goal",
+          "state": "open",
+          "status": "status:blocked",
+          "labels": ["needs:decision"],
+          "reason_codes": ["human_decision_required"],
+          "evidence": {
+            "next_action": "ask_human",
+            "blockers": ["choose execution repo split"]
+          },
+          "next_safe_command": "gira ticket handoff --repo StatPan/backlog --ticket 31 planner --json"
+        }
+      ]
+    },
+    "counts": {
+      "agent_ready": 1,
+      "review_needed": 1,
+      "finish_ready": 0,
+      "blocked": 0,
+      "failed_check": 1,
+      "human_decision": 1
+    },
+    "privacy_boundary": {
+      "scope": "work_item_state_only",
+      "prohibited": [
+        "personal_productivity_ranking",
+        "agent_productivity_ranking",
+        "time_online_scoring",
+        "token_spend_scoring"
+      ]
+    }
+  }
+}
