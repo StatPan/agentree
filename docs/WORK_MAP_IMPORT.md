@@ -26,7 +26,7 @@ Each Gira queue item becomes one `gira-work-item` node keyed by:
 repo + issue + branch
 ```
 
-If the branch is not present, the node keeps `branch: null` and uses an `unknown-branch` identity segment. Agentree must not infer branch ownership from issue title, timestamps, or agent labels.
+If the branch is present, the identity segment is `branch:<name>`. If the branch is not present, the node keeps `branch: null` and uses a `missing-branch` identity segment. Agentree must not infer branch ownership from issue title, timestamps, or agent labels.
 
 Mapped fields:
 
