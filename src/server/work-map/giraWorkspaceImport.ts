@@ -65,7 +65,6 @@ export type WorkNode = {
   source: {
     schemaVersion: string | null
     rawQueue: string | null
-    rawItem: Record<string, unknown>
   }
 }
 
@@ -496,7 +495,6 @@ function parseQueueItem(
     source: {
       schemaVersion,
       rawQueue: queue,
-      rawItem: item,
     },
   }
 
@@ -517,10 +515,7 @@ function mergeNodes(left: WorkNode, right: WorkNode): WorkNode {
     nextAction: left.nextAction.action || left.nextAction.command ? left.nextAction : right.nextAction,
     attribution: left.attribution.kind === 'unknown' ? right.attribution : left.attribution,
     sourceLinks: dedupeLinks([...left.sourceLinks, ...right.sourceLinks]),
-    source: {
-      ...left.source,
-      rawItem: left.source.rawItem,
-    },
+    source: left.source,
   }
 }
 

@@ -16,6 +16,8 @@ Body: a `gira workspace status --json` payload containing `workspace_queues`, or
 
 Response: `agentree-work-map/v1`.
 
+The response exposes only the mapped work-map fields below plus minimal source metadata such as schema version and queue name. It does not echo raw Gira queue items or arbitrary unmapped payload fields.
+
 ## Work Node Mapping
 
 Each Gira queue item becomes one `gira-work-item` node keyed by:

@@ -95,6 +95,42 @@ describe('importGiraWorkspaceStatus', () => {
     })
   })
 
+  it('does not export arbitrary raw Gira queue item fields', () => {
+    const workMap = importGiraWorkspaceStatus({
+      schema_version: 'workspace-queues/v1',
+      queues: {
+        agent_ready: [
+          {
+            repo: 'R/O',
+            issue: 1,
+            branch: 'work',
+            title: 'Allowed mapped title',
+            productivity_score: 99,
+            token_spend: 12345,
+            accidental_sensitive_metadata: 'do-not-export',
+            nested_unmapped_payload: {
+              secret: 'nested-do-not-export',
+            },
+          },
+        ],
+      },
+    })
+
+    expect(workMap.nodes).toHaveLength(1)
+    expect(workMap.nodes[0]?.source).toEqual({
+      schemaVersion: 'workspace-queues/v1',
+      rawQueue: 'agent_ready',
+    })
+
+    const exported = JSON.stringify(workMap)
+    expect(exported).not.toContain('productivity_score')
+    expect(exported).not.toContain('token_spend')
+    expect(exported).not.toContain('accidental_sensitive_metadata')
+    expect(exported).not.toContain('nested_unmapped_payload')
+    expect(exported).not.toContain('do-not-export')
+    expect(exported).not.toContain('nested-do-not-export')
+  })
+
   it('keeps a missing branch identity distinct from a real branch named unknown-branch', () => {
     const workMap = importGiraWorkspaceStatus({
       queues: {
