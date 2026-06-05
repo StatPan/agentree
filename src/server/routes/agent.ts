@@ -2,7 +2,6 @@ import { Hono } from 'hono'
 import { getAllCanvasNodes, getAllProjects, getAllSessionRelations, getAllTaskInvocations, getForkRelationMap } from '../db/index.js'
 import { opencodeAdapter } from '../opencode/index.js'
 import { getPendingPermissions, getPendingQuestions } from '../sse/broadcaster.js'
-import { projectGroupFromDirectory } from '../utils/projectGroup.js'
 
 export const agentRouter = new Hono()
 
