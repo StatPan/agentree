@@ -322,7 +322,7 @@ export function AgentCanvas() {
       {sseStatus !== 'connected' && (
         <div style={{
           position: 'absolute', top: treeError ? 60 : 16, left: '50%', transform: 'translateX(-50%)', zIndex: 20,
-          background: sseStatus === 'disconnected' ? '#1c1917' : '#1c1917',
+          background: '#1c1917',
           border: `1px solid ${sseStatus === 'disconnected' ? '#ef4444' : '#f59e0b'}`,
           color: sseStatus === 'disconnected' ? '#fca5a5' : '#fcd34d',
           padding: '6px 14px', borderRadius: 8,
